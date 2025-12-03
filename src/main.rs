@@ -1,17 +1,19 @@
 #![warn(clippy::pedantic)]
 
-use std::{fs, net::SocketAddr, path::PathBuf, process::ExitCode, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, process::ExitCode, sync::Arc};
 
-use axum::{Router, response::Html, routing::get};
 use clap::{Args, Parser, Subcommand};
-use rand::{seq::SliceRandom, thread_rng};
-use tokio::net::{TcpListener, UnixListener};
+use rand::{rng, seq::SliceRandom};
 
 mod config;
 mod crabbox;
+mod pipe;
+mod web;
 
 use config::Config;
 use crabbox::Crabbox;
+use pipe::serve_control_pipe;
+use web::serve_web;
 
 type AnyResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -60,24 +62,24 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     let crabbox = Arc::new(Crabbox::new(&config));
 
     let mut tracks = crabbox.library.clone();
-    tracks.shuffle(&mut thread_rng());
+    tracks.shuffle(&mut rng());
 
     for track in &tracks {
         println!("{}", track.display());
     }
 
-    if let Some(socket_path) = config
+    if let Some(pipe_path) = config
         .server
-        .socket
+        .pipe
         .as_deref()
         .filter(|path| !path.as_os_str().is_empty())
     {
-        println!("Starting control socket at {}", socket_path.display());
-        let path = socket_path.to_owned();
+        println!("Starting control pipe at {}", pipe_path.display());
+        let path = pipe_path.to_owned();
         let crabbox_clone = Arc::clone(&crabbox);
         tokio::spawn(async move {
-            if let Err(err) = serve_control_socket(path, crabbox_clone).await {
-                eprintln!("Control socket failed: {err}");
+            if let Err(err) = serve_control_pipe(path, crabbox_clone).await {
+                eprintln!("Control pipe failed: {err}");
             }
         });
     }
@@ -85,42 +87,4 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     let web_addr: SocketAddr = config.server.web.parse()?;
     println!("Starting web control interface at http://{web_addr}");
     serve_web(web_addr, Arc::clone(&crabbox)).await
-}
-
-async fn serve_control_socket(socket_path: PathBuf, crabbox: Arc<Crabbox>) -> AnyResult<()> {
-    if socket_path.exists() {
-        fs::remove_file(&socket_path)?;
-    }
-
-    let listener = UnixListener::bind(&socket_path)?;
-    loop {
-        match listener.accept().await {
-            Ok((stream, _)) => {
-                let crabbox = Arc::clone(&crabbox);
-                tokio::spawn(async move {
-                    let _ = handle_control_connection(stream, crabbox).await;
-                });
-            }
-            Err(err) => eprintln!("Control socket accept error: {err}"),
-        }
-    }
-}
-
-async fn handle_control_connection(
-    _stream: tokio::net::UnixStream,
-    _crabbox: Arc<Crabbox>,
-) -> AnyResult<()> {
-    // TODO: parse commands and interact with Crabbox
-    Ok(())
-}
-
-async fn serve_web(addr: SocketAddr, _crabbox: Arc<Crabbox>) -> AnyResult<()> {
-    let app = Router::new().route("/", get(index));
-    let listener = TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
-    Ok(())
-}
-
-async fn index() -> Html<&'static str> {
-    Html("Hello from Crabbox")
 }

@@ -1,17 +1,47 @@
 use std::path::PathBuf;
 
-use crate::config::MusicDirectory;
+use tokio::sync::mpsc;
 use walkdir::WalkDir;
+
+use crate::config::{Config, MusicDirectory};
+
+#[derive(Debug, Clone, Copy)]
+pub enum Command {
+    Play,
+    Stop,
+}
 
 #[derive(Debug)]
 pub struct Crabbox {
     pub library: Vec<PathBuf>,
+    command_tx: mpsc::Sender<Command>,
 }
 
 impl Crabbox {
-    pub fn new(config: &crate::config::Config) -> Self {
+    pub fn new(config: &Config) -> Self {
         let library = collect_music_files(&config.music);
-        Self { library }
+        let (tx, rx) = mpsc::channel(16);
+        tokio::spawn(async move {
+            process_commands(rx).await;
+        });
+
+        Self {
+            library,
+            command_tx: tx,
+        }
+    }
+
+    pub fn sender(&self) -> mpsc::Sender<Command> {
+        self.command_tx.clone()
+    }
+}
+
+async fn process_commands(mut rx: mpsc::Receiver<Command>) {
+    while let Some(cmd) = rx.recv().await {
+        match cmd {
+            Command::Play => println!("Command received: Play"),
+            Command::Stop => println!("Command received: Stop"),
+        }
     }
 }
 

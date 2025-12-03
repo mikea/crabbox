@@ -19,7 +19,7 @@ pub struct MusicDirectory {
 
 #[derive(Debug, Deserialize)]
 pub struct ServerConfig {
-    pub socket: Option<PathBuf>,
+    pub pipe: Option<PathBuf>,
     pub web: String,
 }
 
