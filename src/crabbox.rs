@@ -15,6 +15,7 @@ use crate::config::{Config, MusicDirectory};
 #[derive(Debug, Clone, Copy)]
 pub enum Command {
     Play,
+    PlayPause,
     Stop,
 }
 
@@ -80,6 +81,14 @@ async fn process_commands(
                     debug!("Command received: Play");
                 }
             }
+            Command::PlayPause => {
+                match toggle_play_pause(&library, &mut player) {
+                    ToggleResult::Started(track) => set_current_track(&status, Some(track)),
+                    ToggleResult::Stopped => set_current_track(&status, None),
+                    ToggleResult::Toggled => {}
+                }
+                debug!("Command received: PlayPause");
+            }
             Command::Stop => {
                 player.stop();
                 set_current_track(&status, None);
@@ -112,6 +121,28 @@ fn set_current_track(status: &Arc<Mutex<PlaybackStatus>>, track: Option<PathBuf>
     }
 }
 
+fn toggle_play_pause(library: &[PathBuf], player: &mut Player) -> ToggleResult {
+    if player.has_sink() {
+        if player.is_paused() {
+            player.resume();
+        } else {
+            player.pause();
+        }
+        ToggleResult::Toggled
+    } else {
+        match play_first(library, player) {
+            Some(track) => ToggleResult::Started(track),
+            None => ToggleResult::Stopped,
+        }
+    }
+}
+
+enum ToggleResult {
+    Started(PathBuf),
+    Toggled,
+    Stopped,
+}
+
 #[derive(Default)]
 struct Player {
     sink: Option<Sink>,
@@ -140,6 +171,26 @@ impl Player {
             sink.stop();
         }
         self.stream = None;
+    }
+
+    fn has_sink(&self) -> bool {
+        self.sink.is_some()
+    }
+
+    fn is_paused(&self) -> bool {
+        self.sink.as_ref().map(Sink::is_paused).unwrap_or(false)
+    }
+
+    fn pause(&mut self) {
+        if let Some(sink) = self.sink.as_ref() {
+            sink.pause();
+        }
+    }
+
+    fn resume(&mut self) {
+        if let Some(sink) = self.sink.as_ref() {
+            sink.play();
+        }
     }
 }
 

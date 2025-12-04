@@ -3,6 +3,10 @@ name = "crabbox"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["rpi"]
+rpi = ["rppal"]
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
@@ -15,3 +19,4 @@ libc = "0"
 rodio = { version = "0", default-features = true }
 tracing = "0"
 tracing-subscriber = { version = "0", features = ["fmt"] }
+rppal = { version = "0.17", optional = true }

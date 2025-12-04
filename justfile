@@ -19,5 +19,9 @@ deps:
     sudo apt-get install libasound2-dev
     cargo install --locked cross
 
-build-aarch64-linux-gn:
-    cross build --target aarch64-unknown-linux-gnu
+build-rpi:
+    cross build --target aarch64-unknown-linux-gnu --features rpi
+
+deploy: build-rpi
+    rsync -avz target/aarch64-unknown-linux-gnu/debug/crabbox jukebox.zt.aizatsky.com:/tmp/crabbox 
+    ssh jukebox.zt.aizatsky.com 'killall crabbox ; /tmp/crabbox server /home/mike/crabbox/config.toml'

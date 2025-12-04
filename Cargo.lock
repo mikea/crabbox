@@ -291,6 +291,7 @@ dependencies = [
  "libc",
  "rand",
  "rodio",
+ "rppal",
  "serde",
  "tokio",
  "toml",
@@ -893,6 +894,15 @@ dependencies = [
  "dasp_sample",
  "num-rational",
  "symphonia",
+]
+
+[[package]]
+name = "rppal"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dc171bbe325b04172e18d917c58c2cf1fb5adfd9ffabb1d6b3d62ba4c1c1331"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

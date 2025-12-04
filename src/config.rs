@@ -10,6 +10,8 @@ pub struct Config {
     #[serde(rename = "music")]
     pub music: Vec<MusicDirectory>,
     pub server: ServerConfig,
+    #[cfg(feature = "rpi")]
+    pub gpio: Option<GpioConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -21,6 +23,14 @@ pub struct MusicDirectory {
 pub struct ServerConfig {
     pub pipe: Option<PathBuf>,
     pub web: String,
+}
+
+#[cfg(feature = "rpi")]
+#[derive(Debug, Deserialize)]
+pub struct GpioConfig {
+    pub play: u8,
+    #[serde(default = "default_gpio_debounce_ms")]
+    pub debounce_ms: u64,
 }
 
 impl Config {
@@ -44,6 +54,14 @@ impl Config {
             .into());
         }
 
+        #[cfg(feature = "rpi")]
+        let _ = &config.gpio;
+
         Ok(config)
     }
+}
+
+#[cfg(feature = "rpi")]
+const fn default_gpio_debounce_ms() -> u64 {
+    200
 }

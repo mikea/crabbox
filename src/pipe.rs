@@ -1,4 +1,10 @@
-use std::{ffi::CString, fs, os::unix::ffi::OsStrExt, path::{Path, PathBuf}, sync::Arc};
+use std::{
+    ffi::CString,
+    fs,
+    os::unix::ffi::OsStrExt,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use tokio::{
     fs::OpenOptions,

@@ -3,7 +3,7 @@
 use std::{net::SocketAddr, path::PathBuf, process::ExitCode, sync::Arc};
 
 use clap::{Args, Parser, Subcommand};
-use rand::{seq::SliceRandom, rng};
+use rand::{rng, seq::SliceRandom};
 use tracing::{debug, error, info};
 use tracing_subscriber::FmtSubscriber;
 
@@ -12,8 +12,13 @@ mod crabbox;
 mod pipe;
 mod web;
 
+#[cfg(feature = "rpi")]
+mod gpio;
+
 use config::Config;
 use crabbox::Crabbox;
+#[cfg(feature = "rpi")]
+use gpio::GpioController;
 use pipe::serve_control_pipe;
 use web::serve_web;
 
@@ -87,6 +92,13 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
             }
         });
     }
+
+    #[cfg(feature = "rpi")]
+    let _gpio_controller = if let Some(gpio_cfg) = config.gpio.as_ref() {
+        Some(GpioController::new(gpio_cfg, Arc::clone(&crabbox))?)
+    } else {
+        None
+    };
 
     let web_addr: SocketAddr = config.server.web.parse()?;
     info!("Starting web control interface at http://{web_addr}");
