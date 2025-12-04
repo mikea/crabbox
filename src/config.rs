@@ -31,6 +31,10 @@ pub struct GpioConfig {
     pub play: u8,
     #[serde(default = "default_gpio_debounce_ms")]
     pub debounce_ms: u64,
+    #[serde(default)]
+    pub next: Option<u8>,
+    #[serde(default)]
+    pub prev: Option<u8>,
 }
 
 impl Config {

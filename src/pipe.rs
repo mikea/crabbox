@@ -53,6 +53,8 @@ fn parse_command(input: &str) -> Option<Command> {
     match input.trim().to_ascii_uppercase().as_str() {
         "PLAY" => Some(Command::Play),
         "STOP" => Some(Command::Stop),
+        "NEXT" => Some(Command::Next),
+        "PREV" | "PREVIOUS" => Some(Command::Prev),
         _ => None,
     }
 }

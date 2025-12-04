@@ -70,7 +70,7 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
 
     let crabbox = Arc::new(Crabbox::new(&config));
 
-    let mut tracks = crabbox.library.clone();
+    let mut tracks = crabbox.library.tracks().to_vec();
     tracks.shuffle(&mut rng());
 
     for track in &tracks {
