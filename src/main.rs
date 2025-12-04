@@ -3,7 +3,9 @@
 use std::{net::SocketAddr, path::PathBuf, process::ExitCode, sync::Arc};
 
 use clap::{Args, Parser, Subcommand};
-use rand::{rng, seq::SliceRandom};
+use rand::{seq::SliceRandom, rng};
+use tracing::{debug, error, info};
+use tracing_subscriber::FmtSubscriber;
 
 mod config;
 mod crabbox;
@@ -37,6 +39,8 @@ struct ServerArgs {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ExitCode {
+    init_tracing();
+
     let cli = Cli::parse();
 
     let result = match cli.command {
@@ -46,7 +50,7 @@ async fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("Error: {err}");
+            error!("Error: {err}");
             ExitCode::FAILURE
         }
     }
@@ -56,7 +60,7 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     let config = Config::load(&args.config)?;
 
     for entry in &config.music {
-        println!("Music directory: {}", entry.dir.display());
+        info!("Music directory: {}", entry.dir.display());
     }
 
     let crabbox = Arc::new(Crabbox::new(&config));
@@ -65,7 +69,7 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     tracks.shuffle(&mut rng());
 
     for track in &tracks {
-        println!("{}", track.display());
+        debug!("{}", track.display());
     }
 
     if let Some(pipe_path) = config
@@ -74,17 +78,26 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
         .as_deref()
         .filter(|path| !path.as_os_str().is_empty())
     {
-        println!("Starting control pipe at {}", pipe_path.display());
+        info!("Starting control pipe at {}", pipe_path.display());
         let path = pipe_path.to_owned();
         let crabbox_clone = Arc::clone(&crabbox);
         tokio::spawn(async move {
             if let Err(err) = serve_control_pipe(path, crabbox_clone).await {
-                eprintln!("Control pipe failed: {err}");
+                error!("Control pipe failed: {err}");
             }
         });
     }
 
     let web_addr: SocketAddr = config.server.web.parse()?;
-    println!("Starting web control interface at http://{web_addr}");
+    info!("Starting web control interface at http://{web_addr}");
     serve_web(web_addr, Arc::clone(&crabbox)).await
+}
+
+fn init_tracing() {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(tracing::Level::DEBUG)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("failed to set global tracing subscriber");
 }

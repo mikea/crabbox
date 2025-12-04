@@ -1,6 +1,13 @@
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread,
+};
 
-use tokio::sync::mpsc;
+use rodio::{OutputStream, OutputStreamBuilder, Sink};
+use tokio::{runtime::Builder, sync::mpsc};
+use tracing::{debug, error};
 use walkdir::WalkDir;
 
 use crate::config::{Config, MusicDirectory};
@@ -11,37 +18,128 @@ pub enum Command {
     Stop,
 }
 
-#[derive(Debug)]
+#[derive(Default)]
+struct PlaybackStatus {
+    current: Option<PathBuf>,
+}
+
 pub struct Crabbox {
     pub library: Vec<PathBuf>,
     command_tx: mpsc::Sender<Command>,
+    status: Arc<Mutex<PlaybackStatus>>,
 }
 
 impl Crabbox {
     pub fn new(config: &Config) -> Self {
         let library = collect_music_files(&config.music);
         let (tx, rx) = mpsc::channel(16);
-        tokio::spawn(async move {
-            process_commands(rx).await;
+        let status = Arc::new(Mutex::new(PlaybackStatus::default()));
+
+        thread::spawn({
+            let status = Arc::clone(&status);
+            let library = library.clone();
+            move || {
+                // Run playback logic on a single-threaded runtime so we can hold
+                // non-Send audio types without fighting the async scheduler.
+                let rt = Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to build playback runtime");
+                rt.block_on(process_commands(rx, library, status));
+            }
         });
 
         Self {
             library,
             command_tx: tx,
+            status,
         }
     }
 
     pub fn sender(&self) -> mpsc::Sender<Command> {
         self.command_tx.clone()
     }
+
+    pub fn current_track(&self) -> Option<PathBuf> {
+        self.status.lock().ok()?.current.clone()
+    }
 }
 
-async fn process_commands(mut rx: mpsc::Receiver<Command>) {
+async fn process_commands(
+    mut rx: mpsc::Receiver<Command>,
+    library: Vec<PathBuf>,
+    status: Arc<Mutex<PlaybackStatus>>,
+) {
+    let mut player = Player::default();
+
     while let Some(cmd) = rx.recv().await {
         match cmd {
-            Command::Play => println!("Command received: Play"),
-            Command::Stop => println!("Command received: Stop"),
+            Command::Play => {
+                if let Some(track) = play_first(&library, &mut player) {
+                    set_current_track(&status, Some(track));
+                    debug!("Command received: Play");
+                }
+            }
+            Command::Stop => {
+                player.stop();
+                set_current_track(&status, None);
+                debug!("Command received: Stop");
+            }
         }
+    }
+}
+
+fn play_first(library: &[PathBuf], player: &mut Player) -> Option<PathBuf> {
+    let Some(track) = library.first() else {
+        error!("No tracks available to play");
+        return None;
+    };
+
+    player.stop();
+
+    match player.play(track) {
+        Ok(()) => Some(track.clone()),
+        Err(err) => {
+            error!("{err}");
+            None
+        }
+    }
+}
+
+fn set_current_track(status: &Arc<Mutex<PlaybackStatus>>, track: Option<PathBuf>) {
+    if let Ok(mut guard) = status.lock() {
+        guard.current = track;
+    }
+}
+
+#[derive(Default)]
+struct Player {
+    sink: Option<Sink>,
+    stream: Option<OutputStream>,
+}
+
+impl Player {
+    fn play(&mut self, track: &PathBuf) -> Result<(), String> {
+        let stream = OutputStreamBuilder::open_default_stream()
+            .map_err(|err| format!("Failed to open default audio output: {err}"))?;
+
+        let file = File::open(track)
+            .map_err(|err| format!("Failed to open file {}: {err}", track.display()))?;
+
+        let sink = rodio::play(stream.mixer(), file)
+            .map_err(|err| format!("Failed to start file {}: {err}", track.display()))?;
+
+        self.stream = Some(stream);
+        self.sink = Some(sink);
+
+        Ok(())
+    }
+
+    fn stop(&mut self) {
+        if let Some(sink) = self.sink.take() {
+            sink.stop();
+        }
+        self.stream = None;
     }
 }
 

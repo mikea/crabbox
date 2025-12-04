@@ -1,4 +1,4 @@
-use std::{ffi::CString, fs, os::unix::ffi::OsStrExt, path::PathBuf, sync::Arc};
+use std::{ffi::CString, fs, os::unix::ffi::OsStrExt, path::{Path, PathBuf}, sync::Arc};
 
 use tokio::{
     fs::OpenOptions,
@@ -51,7 +51,7 @@ fn parse_command(input: &str) -> Option<Command> {
     }
 }
 
-fn create_fifo(path: &PathBuf) -> std::io::Result<()> {
+fn create_fifo(path: &Path) -> std::io::Result<()> {
     let c_path = CString::new(path.as_os_str().as_bytes())
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidInput, err))?;
     let mode = 0o666;

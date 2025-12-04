@@ -14,3 +14,6 @@ clippy:
 
 fmt:
     cargo fmt
+
+deps:
+    sudo apt-get install libasound2-dev

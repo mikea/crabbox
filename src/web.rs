@@ -26,8 +26,14 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Crabbox>) -> AnyResult<()>
     Ok(())
 }
 
-async fn index() -> Html<&'static str> {
-    const PAGE: &str = r#"<!doctype html>
+async fn index(State(state): State<AppState>) -> Html<String> {
+    let current = state.crabbox.current_track().map_or_else(
+        || "Nothing playing".to_string(),
+        |p| p.display().to_string(),
+    );
+
+    let page = format!(
+        r#"<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -35,6 +41,7 @@ async fn index() -> Html<&'static str> {
   </head>
   <body>
     <h1>Hello from Crabbox</h1>
+    <p>Current track: {current}</p>
     <form method="post" action="/play">
       <button type="submit">Play</button>
     </form>
@@ -42,9 +49,10 @@ async fn index() -> Html<&'static str> {
       <button type="submit">Stop</button>
     </form>
   </body>
-</html>"#;
+</html>"#
+    );
 
-    Html(PAGE)
+    Html(page)
 }
 
 #[derive(Clone)]
