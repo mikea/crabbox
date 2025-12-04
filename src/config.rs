@@ -12,6 +12,8 @@ pub struct Config {
     pub server: ServerConfig,
     #[cfg(feature = "rpi")]
     pub gpio: Option<GpioConfig>,
+    #[cfg(feature = "rpi")]
+    pub rfid: Option<RfidConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +39,15 @@ pub struct GpioConfig {
     pub prev: Option<u8>,
 }
 
+#[cfg(feature = "rpi")]
+#[derive(Debug, Deserialize)]
+pub struct RfidConfig {
+    pub bus: u8,
+    pub irq: u8,
+    #[serde(default)]
+    pub reset: Option<u8>,
+}
+
 impl Config {
     pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let raw = fs::read_to_string(path)?;
@@ -59,7 +70,7 @@ impl Config {
         }
 
         #[cfg(feature = "rpi")]
-        let _ = &config.gpio;
+        let _ = (&config.gpio, &config.rfid);
 
         Ok(config)
     }

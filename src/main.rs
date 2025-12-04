@@ -3,8 +3,7 @@
 use std::{net::SocketAddr, path::PathBuf, process::ExitCode, sync::Arc};
 
 use clap::{Args, Parser, Subcommand};
-use rand::{rng, seq::SliceRandom};
-use tracing::{debug, error, info};
+use tracing::{error, info};
 use tracing_subscriber::FmtSubscriber;
 
 mod config;
@@ -14,11 +13,15 @@ mod web;
 
 #[cfg(feature = "rpi")]
 mod gpio;
+#[cfg(feature = "rpi")]
+mod rfid;
 
 use config::Config;
 use crabbox::Crabbox;
 #[cfg(feature = "rpi")]
 use gpio::GpioController;
+#[cfg(feature = "rpi")]
+use rfid::Reader;
 use pipe::serve_control_pipe;
 use web::serve_web;
 
@@ -68,14 +71,7 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
         info!("Music directory: {}", entry.dir.display());
     }
 
-    let crabbox = Arc::new(Crabbox::new(&config));
-
-    let mut tracks = crabbox.library.tracks().to_vec();
-    tracks.shuffle(&mut rng());
-
-    for track in &tracks {
-        debug!("{}", track.display());
-    }
+    let crabbox = Crabbox::new(&config);
 
     if let Some(pipe_path) = config
         .server
@@ -99,6 +95,12 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     } else {
         None
     };
+    #[cfg(feature = "rpi")]
+    let _rfid_reader = if let Some(rfid_cfg) = config.rfid.as_ref() {
+        Some(Reader::new(rfid_cfg)?)
+    } else {
+        None
+    };
 
     let web_addr: SocketAddr = config.server.web.parse()?;
     info!("Starting web control interface at http://{web_addr}");
@@ -108,6 +110,8 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
 fn init_tracing() {
     let subscriber = FmtSubscriber::builder()
         .with_max_level(tracing::Level::DEBUG)
+        .with_file(true)
+        .with_line_number(true)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)

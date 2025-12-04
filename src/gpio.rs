@@ -1,9 +1,6 @@
 #![cfg(feature = "rpi")]
 
-use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::{sync::{Arc, Mutex}, time::Duration};
 
 use rppal::gpio::{Gpio, InputPin, Trigger};
 use tracing::{debug, error, info};
@@ -25,28 +22,9 @@ impl Button {
         on_press: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut pin = gpio.get(pin_number)?.into_input_pullup();
-        let last_trigger = Arc::new(Mutex::new(Instant::now()));
 
-        pin.set_async_interrupt(Trigger::FallingEdge, {
-            let last_trigger = Arc::clone(&last_trigger);
-            let on_press = on_press;
-            move |_level| {
-                let now = Instant::now();
-                let mut last = match last_trigger.lock() {
-                    Ok(lock) => lock,
-                    Err(err) => {
-                        error!("Failed to lock debounce state: {err}");
-                        return;
-                    }
-                };
-
-                if now.duration_since(*last) < debounce {
-                    return;
-                }
-
-                *last = now;
-                on_press();
-            }
+        pin.set_async_interrupt(Trigger::FallingEdge, Some(debounce), move |_level| {
+            on_press();
         })?;
 
         Ok(Self { _pin: pin })
@@ -62,7 +40,7 @@ pub struct GpioController {
 impl GpioController {
     pub fn new(
         config: &GpioConfig,
-        crabbox: Arc<Crabbox>,
+        crabbox: Arc<Mutex<Crabbox>>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let gpio = Gpio::new()?;
         let debounce_duration = Duration::from_millis(config.debounce_ms);
@@ -71,9 +49,14 @@ impl GpioController {
             let crabbox = Arc::clone(&crabbox);
             move || {
                 debug!("PlayPause");
-                if let Err(err) = crabbox.sender().blocking_send(Command::PlayPause) {
-                    error!("Failed to send command from GPIO interrupt: {err}");
-                }
+                let sender = crabbox
+                    .lock()
+                    .ok()
+                    .map(|c| c.sender());
+                sender
+                    .and_then(|s| s.blocking_send(Command::PlayPause).err())
+                    .into_iter()
+                    .for_each(|err| error!("Failed to send command from GPIO interrupt: {err}"));
             }
         })?;
 
@@ -84,9 +67,16 @@ impl GpioController {
                     let crabbox = Arc::clone(&crabbox);
                     move || {
                         debug!("Next");
-                        if let Err(err) = crabbox.sender().blocking_send(Command::Next) {
-                            error!("Failed to send NEXT command from GPIO interrupt: {err}");
-                        }
+                        let sender = crabbox
+                            .lock()
+                            .ok()
+                            .map(|c| c.sender());
+                        sender
+                            .and_then(|s| s.blocking_send(Command::Next).err())
+                            .into_iter()
+                            .for_each(|err| {
+                                error!("Failed to send NEXT command from GPIO interrupt: {err}")
+                            });
                     }
                 })
             })
@@ -99,9 +89,16 @@ impl GpioController {
                     let crabbox = Arc::clone(&crabbox);
                     move || {
                         debug!("Prev");
-                        if let Err(err) = crabbox.sender().blocking_send(Command::Prev) {
-                            error!("Failed to send PREV command from GPIO interrupt: {err}");
-                        }
+                        let sender = crabbox
+                            .lock()
+                            .ok()
+                            .map(|c| c.sender());
+                        sender
+                            .and_then(|s| s.blocking_send(Command::Prev).err())
+                            .into_iter()
+                            .for_each(|err| {
+                                error!("Failed to send PREV command from GPIO interrupt: {err}")
+                            });
                     }
                 })
             })

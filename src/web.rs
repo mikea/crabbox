@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::{Arc, Mutex}};
 
 use axum::{
     Router,
@@ -13,7 +13,7 @@ use crate::{
     crabbox::{Command, Crabbox},
 };
 
-pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Crabbox>) -> AnyResult<()> {
+pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
     let state = AppState { crabbox };
 
     let app = Router::new()
@@ -27,10 +27,15 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Crabbox>) -> AnyResult<()>
 }
 
 async fn index(State(state): State<AppState>) -> Html<String> {
-    let current = state.crabbox.current_track().map_or_else(
-        || "Nothing playing".to_string(),
-        |p| p.display().to_string(),
-    );
+    let current = state
+        .crabbox
+        .lock()
+        .ok()
+        .and_then(|c| c.current_track())
+        .map_or_else(
+            || "Nothing playing".to_string(),
+            |p| p.display().to_string(),
+        );
 
     let page = format!(
         r#"<!doctype html>
@@ -57,15 +62,31 @@ async fn index(State(state): State<AppState>) -> Html<String> {
 
 #[derive(Clone)]
 struct AppState {
-    crabbox: Arc<Crabbox>,
+    crabbox: Arc<Mutex<Crabbox>>,
 }
 
 async fn play(State(state): State<AppState>) -> Redirect {
-    let _ = state.crabbox.sender().send(Command::Play).await;
+    let sender = state
+        .crabbox
+        .lock()
+        .ok()
+        .map(|c| c.sender());
+
+    if let Some(sender) = sender {
+        let _ = sender.send(Command::Play).await;
+    }
     Redirect::to("/")
 }
 
 async fn stop(State(state): State<AppState>) -> Redirect {
-    let _ = state.crabbox.sender().send(Command::Stop).await;
+    let sender = state
+        .crabbox
+        .lock()
+        .ok()
+        .map(|c| c.sender());
+
+    if let Some(sender) = sender {
+        let _ = sender.send(Command::Stop).await;
+    }
     Redirect::to("/")
 }
