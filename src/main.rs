@@ -1,6 +1,12 @@
 #![warn(clippy::pedantic)]
 
-use std::{net::SocketAddr, path::PathBuf, process::ExitCode, sync::Arc};
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    process::ExitCode,
+    sync::Arc,
+    thread,
+};
 
 use clap::{Args, Parser, Subcommand};
 use tracing::{error, info};
@@ -23,6 +29,7 @@ use crabbox::Crabbox;
 #[cfg(feature = "rpi")]
 use gpio::GpioController;
 use pipe::serve_control_pipe;
+use player::play_blocking;
 #[cfg(feature = "rpi")]
 use rfid::Reader;
 use web::serve_web;
@@ -68,6 +75,10 @@ async fn main() -> ExitCode {
 
 async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     let config = Config::load(&args.config)?;
+
+    if let Some(startup_sound) = config.server.startup_sound.as_ref() {
+        play_startup_sound(startup_sound.as_path(), config.default_volume);
+    }
 
     for entry in &config.music {
         info!("Music directory: {}", entry.dir.display());
@@ -118,4 +129,19 @@ fn init_tracing() {
 
     tracing::subscriber::set_global_default(subscriber)
         .expect("failed to set global tracing subscriber");
+}
+
+fn play_startup_sound(startup_sound: &Path, default_volume: f32) {
+    let startup_sound = startup_sound.to_path_buf();
+    let handle = thread::spawn(
+        move || match play_blocking(&startup_sound, default_volume) {
+            Ok(()) => info!("Played startup sound from {}", startup_sound.display()),
+            Err(err) => error!(
+                "Failed to play startup sound {}: {err}",
+                startup_sound.display()
+            ),
+        },
+    );
+
+    let _ = handle;
 }

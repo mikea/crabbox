@@ -1,4 +1,7 @@
-use std::{fs::File, path::PathBuf};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use rodio::{OutputStream, OutputStreamBuilder, Sink};
 use tracing::{error, info};
@@ -35,7 +38,7 @@ impl Player {
             .map_err(|err| format!("Failed to open default audio output: {err}"))
     }
 
-    pub fn play(&mut self, track: &PathBuf) -> Result<(), String> {
+    pub fn play(&mut self, track: &Path) -> Result<(), String> {
         let stream = self.new_stream()?;
 
         let file = File::open(track)
@@ -94,6 +97,12 @@ impl Player {
         }
         info!("Volume set to {:.2}", new_volume);
     }
+
+    pub fn wait_until_end(&self) {
+        if let Some(sink) = self.sink.as_ref() {
+            sink.sleep_until_end();
+        }
+    }
 }
 
 pub fn play_track(track: Option<PathBuf>, player: &mut Player) -> Option<PathBuf> {
@@ -104,7 +113,7 @@ pub fn play_track(track: Option<PathBuf>, player: &mut Player) -> Option<PathBuf
 
     player.stop();
 
-    match player.play(&track) {
+    match player.play(track.as_path()) {
         Ok(()) => Some(track),
         Err(err) => {
             error!("{err}");
@@ -133,4 +142,11 @@ pub enum ToggleResult {
     Started(PathBuf),
     Toggled,
     Stopped,
+}
+
+pub fn play_blocking(track: &Path, volume: f32) -> Result<(), String> {
+    let mut player = Player::new(volume);
+    player.play(track)?;
+    player.wait_until_end();
+    Ok(())
 }

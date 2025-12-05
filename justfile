@@ -26,5 +26,5 @@ build-rpi:
     cross build --target aarch64-unknown-linux-gnu --features rpi
 
 deploy: build-rpi
-    rsync -avz target/aarch64-unknown-linux-gnu/debug/crabbox jukebox.zt.aizatsky.com:/tmp/crabbox 
-    ssh jukebox.zt.aizatsky.com 'killall crabbox ; /tmp/crabbox server /home/mike/crabbox/config.toml'
+    rsync -avz target/aarch64-unknown-linux-gnu/debug/crabbox jukebox.zt.aizatsky.com:/home/mike/crabbox/bin/crabbox 
+    ssh jukebox.zt.aizatsky.com 'killall crabbox ; cd crabbox && bin/crabbox server config.toml'

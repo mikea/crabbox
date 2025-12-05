@@ -27,6 +27,8 @@ pub struct MusicDirectory {
 pub struct ServerConfig {
     pub pipe: Option<PathBuf>,
     pub web: String,
+    #[serde(default)]
+    pub startup_sound: Option<PathBuf>,
 }
 
 #[cfg(feature = "rpi")]
@@ -75,6 +77,16 @@ impl Config {
                 "[server].web must be a non-empty address",
             )
             .into());
+        }
+
+        if let Some(sound) = &config.server.startup_sound {
+            if !sound.is_file() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "startup_sound must point to an existing file",
+                )
+                .into());
+            }
         }
 
         #[cfg(feature = "rpi")]

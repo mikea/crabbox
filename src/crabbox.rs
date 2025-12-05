@@ -182,6 +182,7 @@ impl Crabbox {
         match cmd {
             Command::Play { filter } => {
                 let filter = filter.as_deref();
+                debug!(?filter, "Command received: Play");
                 self.rebuild_queue(filter, QueueOrder::Ordered);
                 player.stop();
 
@@ -189,7 +190,6 @@ impl Crabbox {
 
                 if let Some(track) = play_track(track, player) {
                     self.status.current = Some(track);
-                    debug!(?filter, "Command received: Play");
                 }
             }
             Command::PlayPause { filter } => {
