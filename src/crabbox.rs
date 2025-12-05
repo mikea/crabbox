@@ -22,6 +22,14 @@ struct PlaybackStatus {
 }
 
 #[derive(Clone, Default)]
+pub struct CrabboxSnapshot {
+    pub current: Option<PathBuf>,
+    pub queue: Vec<PathBuf>,
+    pub queue_position: Option<usize>,
+    pub library: Vec<PathBuf>,
+}
+
+#[derive(Clone, Default)]
 pub struct Library {
     directories: Vec<PathBuf>,
 }
@@ -168,8 +176,13 @@ impl Crabbox {
         self.command_tx.clone()
     }
 
-    pub fn current_track(&self) -> Option<PathBuf> {
-        self.status.current.clone()
+    pub fn snapshot(&self) -> CrabboxSnapshot {
+        CrabboxSnapshot {
+            current: self.status.current.clone(),
+            queue: self.queue.tracks.clone(),
+            queue_position: self.queue.current,
+            library: self.library.list_tracks(None),
+        }
     }
 
     fn process_command(&mut self, cmd: Command, player: &mut Player) {
