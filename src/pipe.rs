@@ -75,6 +75,7 @@ fn parse_command(input: &str) -> Option<Command> {
         "STOP" => Some(Command::Stop),
         "NEXT" => Some(Command::Next),
         "PREV" | "PREVIOUS" => Some(Command::Prev),
+        "SHUTDOWN" => Some(Command::Shutdown),
         "VOLUMEUP" => Some(Command::VolumeUp),
         "VOLUMEDOWN" => Some(Command::VolumeDown),
         _ => None,

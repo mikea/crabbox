@@ -43,6 +43,8 @@ pub struct GpioConfig {
     pub volume_up: Option<u8>,
     #[serde(default)]
     pub volume_down: Option<u8>,
+    #[serde(default)]
+    pub shutdown: Option<u8>,
 }
 
 #[cfg(feature = "rpi")]

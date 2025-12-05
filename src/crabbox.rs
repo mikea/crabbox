@@ -25,6 +25,7 @@ pub enum Command {
     Prev,
     VolumeUp,
     VolumeDown,
+    Shutdown,
 }
 
 #[derive(Default)]
@@ -263,6 +264,12 @@ impl Crabbox {
                 player.volume_down();
                 debug!("Command received: VolumeDown");
             }
+            Command::Shutdown => {
+                debug!("Command received: Shutdown");
+                if let Err(err) = shutdown_now() {
+                    warn!("Failed to trigger shutdown: {err}");
+                }
+            }
         }
     }
 
@@ -325,4 +332,13 @@ fn is_music_extension(ext: &str) -> bool {
         ext.to_ascii_lowercase().as_str(),
         "mp3" | "flac" | "wav" | "ogg" | "m4a" | "aac" | "opus" | "alac"
     )
+}
+
+fn shutdown_now() -> std::io::Result<()> {
+    use std::process::Command;
+
+    Command::new("sudo")
+        .args(["shutdown", "now"])
+        .spawn()
+        .map(|_| ())
 }
