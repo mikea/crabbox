@@ -10,6 +10,7 @@ mod config;
 mod crabbox;
 mod glob;
 mod pipe;
+mod player;
 mod web;
 
 #[cfg(feature = "rpi")]

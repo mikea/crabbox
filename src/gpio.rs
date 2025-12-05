@@ -38,6 +38,8 @@ pub struct GpioController {
     _play_button: Button,
     _next_button: Option<Button>,
     _prev_button: Option<Button>,
+    _volume_up_button: Option<Button>,
+    _volume_down_button: Option<Button>,
 }
 
 impl GpioController {
@@ -98,6 +100,46 @@ impl GpioController {
             })
             .transpose()?;
 
+        let volume_up_button = config
+            .volume_up
+            .map(|pin| {
+                Button::new(&gpio, pin, debounce_duration, {
+                    let crabbox = Arc::clone(&crabbox);
+                    move || {
+                        debug!("VolumeUp");
+                        let sender = crabbox.lock().ok().map(|c| c.sender());
+                        sender
+                            .and_then(|s| s.blocking_send(Command::VolumeUp).err())
+                            .into_iter()
+                            .for_each(|err| {
+                                error!("Failed to send VOLUMEUP command from GPIO interrupt: {err}")
+                            });
+                    }
+                })
+            })
+            .transpose()?;
+
+        let volume_down_button = config
+            .volume_down
+            .map(|pin| {
+                Button::new(&gpio, pin, debounce_duration, {
+                    let crabbox = Arc::clone(&crabbox);
+                    move || {
+                        debug!("VolumeDown");
+                        let sender = crabbox.lock().ok().map(|c| c.sender());
+                        sender
+                            .and_then(|s| s.blocking_send(Command::VolumeDown).err())
+                            .into_iter()
+                            .for_each(|err| {
+                                error!(
+                                    "Failed to send VOLUMEDOWN command from GPIO interrupt: {err}"
+                                )
+                            });
+                    }
+                })
+            })
+            .transpose()?;
+
         info!("GPIO control enabled (play/pause pin {})", config.play);
         if let Some(pin) = config.next {
             info!("GPIO control enabled (next pin {})", pin);
@@ -105,11 +147,19 @@ impl GpioController {
         if let Some(pin) = config.prev {
             info!("GPIO control enabled (prev pin {})", pin);
         }
+        if let Some(pin) = config.volume_up {
+            info!("GPIO control enabled (volume up pin {})", pin);
+        }
+        if let Some(pin) = config.volume_down {
+            info!("GPIO control enabled (volume down pin {})", pin);
+        }
 
         Ok(Self {
             _play_button: play_button,
             _next_button: next_button,
             _prev_button: prev_button,
+            _volume_up_button: volume_up_button,
+            _volume_down_button: volume_down_button,
         })
     }
 }

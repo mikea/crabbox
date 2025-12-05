@@ -10,6 +10,8 @@ pub struct Config {
     #[serde(rename = "music")]
     pub music: Vec<MusicDirectory>,
     pub server: ServerConfig,
+    #[serde(default = "default_volume")]
+    pub default_volume: f32,
     #[cfg(feature = "rpi")]
     pub gpio: Option<GpioConfig>,
     #[cfg(feature = "rpi")]
@@ -37,6 +39,10 @@ pub struct GpioConfig {
     pub next: Option<u8>,
     #[serde(default)]
     pub prev: Option<u8>,
+    #[serde(default)]
+    pub volume_up: Option<u8>,
+    #[serde(default)]
+    pub volume_down: Option<u8>,
 }
 
 #[cfg(feature = "rpi")]
@@ -74,6 +80,10 @@ impl Config {
 
         Ok(config)
     }
+}
+
+const fn default_volume() -> f32 {
+    1.0
 }
 
 #[cfg(feature = "rpi")]

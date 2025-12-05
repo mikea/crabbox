@@ -1,19 +1,18 @@
 use std::{
-    fs::File,
     path::PathBuf,
     sync::{Arc, Mutex},
     thread,
 };
 
 use rand::{rng, seq::SliceRandom};
-use rodio::{OutputStream, OutputStreamBuilder, Sink};
 use tokio::{runtime::Builder, sync::mpsc};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
 use crate::{
     config::{Config, MusicDirectory},
     glob::Glob,
+    player::{Player, ToggleResult, play_track, toggle_play_pause},
 };
 
 #[derive(Debug, Clone)]
@@ -24,6 +23,8 @@ pub enum Command {
     Stop,
     Next,
     Prev,
+    VolumeUp,
+    VolumeDown,
 }
 
 #[derive(Default)]
@@ -153,6 +154,7 @@ impl Crabbox {
 
         thread::spawn({
             let playback_crabbox = Arc::clone(&crabbox);
+            let default_volume = config.default_volume;
             move || {
                 // Run playback logic on a single-threaded runtime so we can hold
                 // non-Send audio types without fighting the async scheduler.
@@ -160,7 +162,7 @@ impl Crabbox {
                     .enable_all()
                     .build()
                     .expect("failed to build playback runtime");
-                rt.block_on(process_commands(rx, playback_crabbox));
+                rt.block_on(process_commands(rx, playback_crabbox, default_volume));
             }
         });
 
@@ -253,6 +255,14 @@ impl Crabbox {
                     debug!("Command received: Prev");
                 }
             }
+            Command::VolumeUp => {
+                player.volume_up();
+                debug!("Command received: VolumeUp");
+            }
+            Command::VolumeDown => {
+                player.volume_down();
+                debug!("Command received: VolumeDown");
+            }
         }
     }
 
@@ -276,102 +286,16 @@ impl Crabbox {
     }
 }
 
-async fn process_commands(mut rx: mpsc::Receiver<Command>, crabbox: Arc<Mutex<Crabbox>>) {
-    let mut player = Player::default();
+async fn process_commands(
+    mut rx: mpsc::Receiver<Command>,
+    crabbox: Arc<Mutex<Crabbox>>,
+    default_volume: f32,
+) {
+    let mut player = Player::new(default_volume);
 
     while let Some(cmd) = rx.recv().await {
         if let Ok(mut crabbox) = crabbox.lock() {
             crabbox.process_command(cmd, &mut player);
-        }
-    }
-}
-
-fn play_track(track: Option<PathBuf>, player: &mut Player) -> Option<PathBuf> {
-    let Some(track) = track else {
-        error!("No tracks available to play");
-        return None;
-    };
-
-    player.stop();
-
-    match player.play(&track) {
-        Ok(()) => Some(track),
-        Err(err) => {
-            error!("{err}");
-            None
-        }
-    }
-}
-
-fn toggle_play_pause(track: Option<PathBuf>, player: &mut Player) -> ToggleResult {
-    if player.has_sink() {
-        if player.is_paused() {
-            player.resume();
-        } else {
-            player.pause();
-        }
-        ToggleResult::Toggled
-    } else {
-        match play_track(track, player) {
-            Some(track) => ToggleResult::Started(track),
-            None => ToggleResult::Stopped,
-        }
-    }
-}
-
-enum ToggleResult {
-    Started(PathBuf),
-    Toggled,
-    Stopped,
-}
-
-#[derive(Default)]
-struct Player {
-    sink: Option<Sink>,
-    stream: Option<OutputStream>,
-}
-
-impl Player {
-    fn play(&mut self, track: &PathBuf) -> Result<(), String> {
-        let stream = OutputStreamBuilder::open_default_stream()
-            .map_err(|err| format!("Failed to open default audio output: {err}"))?;
-
-        let file = File::open(track)
-            .map_err(|err| format!("Failed to open file {}: {err}", track.display()))?;
-
-        let sink = rodio::play(stream.mixer(), file)
-            .map_err(|err| format!("Failed to start file {}: {err}", track.display()))?;
-
-        self.stream = Some(stream);
-        self.sink = Some(sink);
-
-        Ok(())
-    }
-
-    fn stop(&mut self) {
-        if let Some(sink) = self.sink.take() {
-            sink.stop();
-        }
-        self.stream = None;
-    }
-
-    fn has_sink(&self) -> bool {
-        self.sink.is_some()
-    }
-
-    fn is_paused(&self) -> bool {
-        self.sink.as_ref().map(Sink::is_paused).unwrap_or(false)
-    }
-
-    fn pause(&mut self) {
-        if let Some(sink) = self.sink.as_ref() {
-            sink.pause();
-        }
-    }
-
-    fn resume(&mut self) {
-        if let Some(sink) = self.sink.as_ref() {
-            sink.play();
         }
     }
 }
