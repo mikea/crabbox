@@ -41,7 +41,8 @@ pub struct ServerConfig {
 #[cfg(feature = "rpi")]
 #[derive(Debug, Deserialize)]
 pub struct GpioConfig {
-    pub play: u8,
+    #[serde(default)]
+    pub play: Option<u8>,
     #[serde(default = "default_gpio_debounce_ms")]
     pub debounce_ms: u64,
     #[serde(default)]

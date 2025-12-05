@@ -24,16 +24,16 @@ shutdown_sound = "/path/to/shutdown.mp3"
 
 # Raspberry Pi only (enabled with the `rpi` feature).
 [gpio]
-# Required: GPIO pin to toggle play/pause.
-play = 17
+# Optional: set any pins you want to enable; leave unset to disable GPIO input entirely.
+# play = 17
 # Optional debounce for button presses in milliseconds; defaults to 200.
 debounce_ms = 200
 # Optional GPIO pins for navigation/volume/shutdown buttons.
-next = 27
-prev = 22
-volume_up = 23
-volume_down = 24
-shutdown = 25
+# next = 27
+# prev = 22
+# volume_up = 23
+# volume_down = 24
+# shutdown = 25
 
 # Raspberry Pi only (enabled with the `rpi` feature).
 [rfid]

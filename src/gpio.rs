@@ -63,7 +63,7 @@ impl LongPressButton {
 }
 
 pub struct GpioController {
-    _play_button: Button,
+    _play_button: Option<Button>,
     _next_button: Option<Button>,
     _prev_button: Option<Button>,
     _volume_up_button: Option<Button>,
@@ -76,15 +76,39 @@ impl GpioController {
         config: &GpioConfig,
         crabbox: Arc<Mutex<Crabbox>>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let pins_configured = config.play.is_some()
+            || config.next.is_some()
+            || config.prev.is_some()
+            || config.volume_up.is_some()
+            || config.volume_down.is_some()
+            || config.shutdown.is_some();
+
+        if !pins_configured {
+            info!("GPIO control disabled: no pins configured");
+            return Ok(Self {
+                _play_button: None,
+                _next_button: None,
+                _prev_button: None,
+                _volume_up_button: None,
+                _volume_down_button: None,
+                _shutdown_button: None,
+            });
+        }
+
         let gpio = Gpio::new()?;
         let debounce_duration = Duration::from_millis(config.debounce_ms);
 
-        let play_button = Button::new(
-            &gpio,
-            config.play,
-            debounce_duration,
-            make_sender(&crabbox, Command::PlayPause { filter: None }, "PlayPause"),
-        )?;
+        let play_button = config
+            .play
+            .map(|pin| {
+                Button::new(
+                    &gpio,
+                    pin,
+                    debounce_duration,
+                    make_sender(&crabbox, Command::PlayPause { filter: None }, "PlayPause"),
+                )
+            })
+            .transpose()?;
 
         let next_button = config
             .next
@@ -151,7 +175,9 @@ impl GpioController {
             })
             .transpose()?;
 
-        info!("GPIO control enabled (play/pause pin {})", config.play);
+        if let Some(pin) = config.play {
+            info!("GPIO control enabled (play/pause pin {})", pin);
+        }
         if let Some(pin) = config.next {
             info!("GPIO control enabled (next pin {})", pin);
         }
