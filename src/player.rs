@@ -7,7 +7,8 @@ use rodio::{OutputStream, OutputStreamBuilder, Sink};
 use tracing::{error, info};
 
 pub const VOLUME_STEP: f32 = 0.05;
-pub const MAX_VOLUME: f32 = 2.0;
+pub const MAX_VOLUME: f32 = 1.0;
+pub const MIN_VOLUME: f32 = 0.01;
 
 pub struct Player {
     sink: Option<Sink>,
@@ -90,7 +91,7 @@ impl Player {
     }
 
     fn adjust_volume(&mut self, delta: f32) {
-        let new_volume = (self.volume + delta).clamp(0.0, MAX_VOLUME);
+        let new_volume = (self.volume + delta).clamp(MIN_VOLUME, MAX_VOLUME);
         self.volume = new_volume;
         if let Some(sink) = self.sink.as_ref() {
             sink.set_volume(new_volume);

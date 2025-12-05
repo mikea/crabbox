@@ -1,0 +1,50 @@
+# Example configuration for crabbox. Copy this file to `config.toml` and adjust
+# paths/pins to match your setup.
+
+# At least one music directory is required. You can repeat [[music]] blocks.
+[[music]]
+dir = "/path/to/your/music"
+
+[[music]]
+dir = "/another/library"
+
+# Global playback settings.
+# Optional; defaults to 1.0 (100%).
+default_volume = 1.0
+
+# Server configuration.
+[server]
+# Optional Unix pipe path used for local control (set to null to disable).
+pipe = "/tmp/crabbox.pipe"
+# Required listening address for the web UI / API.
+web = "0.0.0.0:8080"
+# Optional sounds played on startup/shutdown. Must point to existing files.
+startup_sound = "/path/to/startup.mp3"
+shutdown_sound = "/path/to/shutdown.mp3"
+
+# Raspberry Pi only (enabled with the `rpi` feature).
+[gpio]
+# Required: GPIO pin to toggle play/pause.
+play = 17
+# Optional debounce for button presses in milliseconds; defaults to 200.
+debounce_ms = 200
+# Optional GPIO pins for navigation/volume/shutdown buttons.
+next = 27
+prev = 22
+volume_up = 23
+volume_down = 24
+shutdown = 25
+
+# Raspberry Pi only (enabled with the `rpi` feature).
+[rfid]
+# SPI bus/slave select used by the RC522 reader.
+bus = 0
+irq = 5
+# Optional reset pin; omit or set to null if not wired.
+reset = 6
+
+# Map RFID tag IDs (8 hex chars) to commands.
+[rfid.tags]
+0A1B2C3D = "PLAY"
+11223344 = "SHUFFLE chill/*"
+DEADBEEF = "SHUTDOWN"

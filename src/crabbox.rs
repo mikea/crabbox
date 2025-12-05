@@ -13,7 +13,7 @@ use crate::{
     commands::Command,
     config::{Config, MusicDirectory},
     glob::Glob,
-    player::{Player, ToggleResult, play_track, toggle_play_pause},
+    player::{Player, ToggleResult, play_blocking, play_track, toggle_play_pause},
 };
 
 #[derive(Default)]
@@ -120,6 +120,8 @@ pub struct Crabbox {
     pub queue: Queue,
     command_tx: mpsc::Sender<Command>,
     status: PlaybackStatus,
+    shutdown_sound: Option<PathBuf>,
+    default_volume: f32,
 }
 
 enum QueueOrder {
@@ -133,12 +135,16 @@ impl Crabbox {
         let queue = Queue::from_tracks_ordered(library.list_tracks(None));
         let (tx, rx) = mpsc::channel(16);
         let status = PlaybackStatus::default();
+        let shutdown_sound = config.server.shutdown_sound.clone();
+        let default_volume = config.default_volume;
 
         let crabbox = Arc::new(Mutex::new(Self {
             library,
             queue,
             command_tx: tx,
             status,
+            shutdown_sound,
+            default_volume,
         }));
 
         thread::spawn({
@@ -254,6 +260,13 @@ impl Crabbox {
             }
             Command::Shutdown => {
                 debug!("Command received: Shutdown");
+                player.stop();
+                self.status.current = None;
+                if let Some(sound) = self.shutdown_sound.as_ref() {
+                    if let Err(err) = play_blocking(sound, self.default_volume) {
+                        warn!("Failed to play shutdown sound {}: {err}", sound.display());
+                    }
+                }
                 if let Err(err) = shutdown_now() {
                     warn!("Failed to trigger shutdown: {err}");
                 }
