@@ -2,7 +2,7 @@
 
 use std::{
     error::Error,
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::Duration,
 };
@@ -162,7 +162,12 @@ impl Rc522 {
             return Err("UID checksum mismatch".into());
         }
 
-        Ok(Some([back_data[0], back_data[1], back_data[2], back_data[3]]))
+        Ok(Some([
+            back_data[0],
+            back_data[1],
+            back_data[2],
+            back_data[3],
+        ]))
     }
 
     fn transceive(&mut self, data: &[u8]) -> Result<Option<Vec<u8>>, Box<dyn Error + Send + Sync>> {
@@ -274,7 +279,7 @@ fn resolve_spi(config: &RfidConfig) -> Result<(Bus, SlaveSelect), Box<dyn Error 
                 "Unsupported SPI bus {}. Supported buses are 0 through 6.",
                 other
             )
-            .into())
+            .into());
         }
     };
 

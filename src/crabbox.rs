@@ -1,17 +1,25 @@
-use std::{fs::File, path::PathBuf, sync::{Arc, Mutex}, thread};
+use std::{
+    fs::File,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread,
+};
 
 use rand::{rng, seq::SliceRandom};
 use rodio::{OutputStream, OutputStreamBuilder, Sink};
 use tokio::{runtime::Builder, sync::mpsc};
-use tracing::{debug, error};
+use tracing::{debug, error, info, warn};
 use walkdir::WalkDir;
 
-use crate::config::{Config, MusicDirectory};
+use crate::{
+    config::{Config, MusicDirectory},
+    glob::Glob,
+};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Command {
-    Play,
-    PlayPause,
+    Play { filter: Option<String> },
+    PlayPause { filter: Option<String> },
     Stop,
     Next,
     Prev,
@@ -34,6 +42,21 @@ impl Library {
         }
     }
 
+    fn filtered_tracks(&self, filter: &str) -> Vec<PathBuf> {
+        match Glob::new(filter) {
+            Ok(glob) => self
+                .tracks
+                .iter()
+                .filter(|path| glob.is_match_path(path))
+                .cloned()
+                .collect(),
+            Err(err) => {
+                warn!(filter, "Invalid glob: {err}");
+                Vec::new()
+            }
+        }
+    }
+
     #[expect(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.tracks.is_empty()
@@ -51,18 +74,19 @@ pub struct Queue {
 }
 
 impl Queue {
-    fn from_library_shuffled(library: &Library) -> Self {
-        let mut tracks = library.tracks.clone();
+    fn from_tracks_shuffled(mut tracks: Vec<PathBuf>) -> Self {
         tracks.shuffle(&mut rng());
         let current = if tracks.is_empty() { None } else { Some(0) };
 
         Self { tracks, current }
     }
 
+    fn from_library_shuffled(library: &Library) -> Self {
+        Self::from_tracks_shuffled(library.tracks.clone())
+    }
+
     fn current_track(&self) -> Option<PathBuf> {
-        self.current
-            .and_then(|idx| self.tracks.get(idx))
-            .cloned()
+        self.current.and_then(|idx| self.tracks.get(idx)).cloned()
     }
 
     fn track_at(&self, idx: usize) -> Option<PathBuf> {
@@ -96,10 +120,16 @@ impl Queue {
         self.current = Some(prev_idx);
         self.track_at(prev_idx)
     }
+    
+    fn log(&self) {
+        info!("new queue: {} tracks", self.tracks.len());
+        for track in &self.tracks {
+            debug!("{track:?}")
+        }
+    }
 }
 
 pub struct Crabbox {
-    #[expect(dead_code)]
     pub library: Library,
     pub queue: Queue,
     command_tx: mpsc::Sender<Command>,
@@ -146,23 +176,44 @@ impl Crabbox {
 
     fn process_command(&mut self, cmd: Command, player: &mut Player) {
         match cmd {
-            Command::Play => {
+            Command::Play { filter } => {
+                let filter = filter.as_deref();
+                let filter_applied = self.apply_filter(filter);
+                if filter_applied {
+                    player.stop();
+                }
+
                 let track = self.queue.current_track();
 
                 if let Some(track) = play_track(track, player) {
                     self.status.current = Some(track);
-                    debug!("Command received: Play");
+                    debug!(?filter, "Command received: Play");
                 }
             }
-            Command::PlayPause => {
+            Command::PlayPause { filter } => {
+                let filter = filter.as_deref();
+                let filter_applied = self.apply_filter(filter);
+                if filter_applied {
+                    player.stop();
+                }
+
                 let track = self.queue.current_track();
 
-                match toggle_play_pause(track, player) {
+                let toggle_result = if filter_applied {
+                    match play_track(track, player) {
+                        Some(track) => ToggleResult::Started(track),
+                        None => ToggleResult::Stopped,
+                    }
+                } else {
+                    toggle_play_pause(track, player)
+                };
+
+                match toggle_result {
                     ToggleResult::Started(track) => self.status.current = Some(track),
                     ToggleResult::Stopped => self.status.current = None,
                     ToggleResult::Toggled => {}
                 }
-                debug!("Command received: PlayPause");
+                debug!(?filter, "Command received: PlayPause");
             }
             Command::Stop => {
                 player.stop();
@@ -186,6 +237,21 @@ impl Crabbox {
                 }
             }
         }
+    }
+
+    fn apply_filter(&mut self, filter: Option<&str>) -> bool {
+        let Some(filter) = filter else {
+            return false;
+        };
+
+        let tracks = self.library.filtered_tracks(filter);
+        if tracks.is_empty() {
+            warn!(filter, "Filter matched no tracks");
+        }
+        self.queue = Queue::from_tracks_shuffled(tracks);
+        self.queue.log();
+        self.status.current = None;
+        true
     }
 }
 

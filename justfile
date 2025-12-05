@@ -1,10 +1,13 @@
 alias w := watch
 
-watch *args="check":
+watch *args="test":
     cargo watch -c -- just {{args}}
 
 check:
     cargo check
+
+test:
+    cargo test
 
 server *args:
     cargo run -- server {{args}}

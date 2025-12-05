@@ -48,16 +48,29 @@ pub async fn serve_control_pipe(
             continue;
         }
 
-        let Some(cmd) = parse_command(line.trim()) else { continue };
-        let Some(sender) = sender.as_ref() else { continue };
+        let Some(cmd) = parse_command(line.trim()) else {
+            continue;
+        };
+        let Some(sender) = sender.as_ref() else {
+            continue;
+        };
 
         let _ = sender.send(cmd).await;
     }
 }
 
 fn parse_command(input: &str) -> Option<Command> {
-    match input.trim().to_ascii_uppercase().as_str() {
-        "PLAY" => Some(Command::Play),
+    let mut parts = input.trim().splitn(2, char::is_whitespace);
+    let command = parts.next()?.to_ascii_uppercase();
+    let filter = parts
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
+
+    match command.as_str() {
+        "PLAY" => Some(Command::Play { filter }),
+        "PLAYPAUSE" => Some(Command::PlayPause { filter }),
         "STOP" => Some(Command::Stop),
         "NEXT" => Some(Command::Next),
         "PREV" | "PREVIOUS" => Some(Command::Prev),

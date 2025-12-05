@@ -1,4 +1,7 @@
-use std::{net::SocketAddr, sync::{Arc, Mutex}};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
 use axum::{
     Router,
@@ -66,24 +69,16 @@ struct AppState {
 }
 
 async fn play(State(state): State<AppState>) -> Redirect {
-    let sender = state
-        .crabbox
-        .lock()
-        .ok()
-        .map(|c| c.sender());
+    let sender = state.crabbox.lock().ok().map(|c| c.sender());
 
     if let Some(sender) = sender {
-        let _ = sender.send(Command::Play).await;
+        let _ = sender.send(Command::Play { filter: None }).await;
     }
     Redirect::to("/")
 }
 
 async fn stop(State(state): State<AppState>) -> Redirect {
-    let sender = state
-        .crabbox
-        .lock()
-        .ok()
-        .map(|c| c.sender());
+    let sender = state.crabbox.lock().ok().map(|c| c.sender());
 
     if let Some(sender) = sender {
         let _ = sender.send(Command::Stop).await;

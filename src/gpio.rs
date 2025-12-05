@@ -1,6 +1,9 @@
 #![cfg(feature = "rpi")]
 
-use std::{sync::{Arc, Mutex}, time::Duration};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use rppal::gpio::{Gpio, InputPin, Trigger};
 use tracing::{debug, error, info};
@@ -49,12 +52,9 @@ impl GpioController {
             let crabbox = Arc::clone(&crabbox);
             move || {
                 debug!("PlayPause");
-                let sender = crabbox
-                    .lock()
-                    .ok()
-                    .map(|c| c.sender());
+                let sender = crabbox.lock().ok().map(|c| c.sender());
                 sender
-                    .and_then(|s| s.blocking_send(Command::PlayPause).err())
+                    .and_then(|s| s.blocking_send(Command::PlayPause { filter: None }).err())
                     .into_iter()
                     .for_each(|err| error!("Failed to send command from GPIO interrupt: {err}"));
             }
@@ -67,10 +67,7 @@ impl GpioController {
                     let crabbox = Arc::clone(&crabbox);
                     move || {
                         debug!("Next");
-                        let sender = crabbox
-                            .lock()
-                            .ok()
-                            .map(|c| c.sender());
+                        let sender = crabbox.lock().ok().map(|c| c.sender());
                         sender
                             .and_then(|s| s.blocking_send(Command::Next).err())
                             .into_iter()
@@ -89,10 +86,7 @@ impl GpioController {
                     let crabbox = Arc::clone(&crabbox);
                     move || {
                         debug!("Prev");
-                        let sender = crabbox
-                            .lock()
-                            .ok()
-                            .map(|c| c.sender());
+                        let sender = crabbox.lock().ok().map(|c| c.sender());
                         sender
                             .and_then(|s| s.blocking_send(Command::Prev).err())
                             .into_iter()

@@ -8,6 +8,7 @@ use tracing_subscriber::FmtSubscriber;
 
 mod config;
 mod crabbox;
+mod glob;
 mod pipe;
 mod web;
 
@@ -20,9 +21,9 @@ use config::Config;
 use crabbox::Crabbox;
 #[cfg(feature = "rpi")]
 use gpio::GpioController;
+use pipe::serve_control_pipe;
 #[cfg(feature = "rpi")]
 use rfid::Reader;
-use pipe::serve_control_pipe;
 use web::serve_web;
 
 type AnyResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
