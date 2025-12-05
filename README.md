@@ -104,6 +104,12 @@ WantedBy=default.target
 - View logs with `journalctl --user -u crabbox -f`. Stop or restart with `systemctl --user stop|restart crabbox.service`.
 - To have the user service start at boot without logging in, enable lingering once: `loginctl enable-linger $USER`.
 
+# Contributing
+
+AI-assisted code is welcome, with fiew common caveats:
+
+- no huge PRs
+- you read the code and verify it does what you asked it to
 
 # Crabbox I
 
