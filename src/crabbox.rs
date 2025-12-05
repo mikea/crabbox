@@ -32,39 +32,33 @@ struct PlaybackStatus {
 
 #[derive(Clone, Default)]
 pub struct Library {
-    tracks: Vec<PathBuf>,
+    directories: Vec<PathBuf>,
 }
 
 impl Library {
     fn new(directories: &[MusicDirectory]) -> Self {
         Self {
-            tracks: collect_music_files(directories),
+            directories: directories.iter().map(|d| d.dir.clone()).collect(),
         }
     }
 
-    fn filtered_tracks(&self, filter: &str) -> Vec<PathBuf> {
-        match Glob::new(filter) {
-            Ok(glob) => self
-                .tracks
-                .iter()
+    pub fn list_tracks(&self, filter: Option<String>) -> Vec<PathBuf> {
+        let tracks = collect_music_files(&self.directories);
+
+        let Some(filter) = filter else {
+            return tracks;
+        };
+
+        match Glob::new(&filter) {
+            Ok(glob) => tracks
+                .into_iter()
                 .filter(|path| glob.is_match_path(path))
-                .cloned()
                 .collect(),
             Err(err) => {
-                warn!(filter, "Invalid glob: {err}");
+                warn!(?filter, "Invalid glob: {err}");
                 Vec::new()
             }
         }
-    }
-
-    #[expect(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.tracks.is_empty()
-    }
-
-    #[expect(dead_code)]
-    pub fn tracks(&self) -> &[PathBuf] {
-        &self.tracks
     }
 }
 
@@ -82,7 +76,7 @@ impl Queue {
     }
 
     fn from_library_shuffled(library: &Library) -> Self {
-        Self::from_tracks_shuffled(library.tracks.clone())
+        Self::from_tracks_shuffled(library.list_tracks(None))
     }
 
     fn current_track(&self) -> Option<PathBuf> {
@@ -120,7 +114,7 @@ impl Queue {
         self.current = Some(prev_idx);
         self.track_at(prev_idx)
     }
-    
+
     fn log(&self) {
         info!("new queue: {} tracks", self.tracks.len());
         for track in &self.tracks {
@@ -244,7 +238,7 @@ impl Crabbox {
             return false;
         };
 
-        let tracks = self.library.filtered_tracks(filter);
+        let tracks = self.library.list_tracks(Some(filter.to_string()));
         if tracks.is_empty() {
             warn!(filter, "Filter matched no tracks");
         }
@@ -355,11 +349,11 @@ impl Player {
     }
 }
 
-fn collect_music_files(directories: &[MusicDirectory]) -> Vec<PathBuf> {
+fn collect_music_files(directories: &[PathBuf]) -> Vec<PathBuf> {
     let mut files = Vec::new();
 
     for dir in directories {
-        for entry in WalkDir::new(&dir.dir).into_iter().filter_map(Result::ok) {
+        for entry in WalkDir::new(dir).into_iter().filter_map(Result::ok) {
             if !entry.file_type().is_file() {
                 continue;
             }
