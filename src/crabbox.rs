@@ -20,6 +20,7 @@ use crate::{
 pub enum Command {
     Play { filter: Option<String> },
     PlayPause { filter: Option<String> },
+    Shuffle { filter: Option<String> },
     Stop,
     Next,
     Prev,
@@ -68,15 +69,16 @@ pub struct Queue {
 }
 
 impl Queue {
+    fn from_tracks_ordered(tracks: Vec<PathBuf>) -> Self {
+        let current = if tracks.is_empty() { None } else { Some(0) };
+        Self { tracks, current }
+    }
+
     fn from_tracks_shuffled(mut tracks: Vec<PathBuf>) -> Self {
         tracks.shuffle(&mut rng());
         let current = if tracks.is_empty() { None } else { Some(0) };
 
         Self { tracks, current }
-    }
-
-    fn from_library_shuffled(library: &Library) -> Self {
-        Self::from_tracks_shuffled(library.list_tracks(None))
     }
 
     fn current_track(&self) -> Option<PathBuf> {
@@ -130,10 +132,15 @@ pub struct Crabbox {
     status: PlaybackStatus,
 }
 
+enum QueueOrder {
+    Ordered,
+    Shuffled,
+}
+
 impl Crabbox {
     pub fn new(config: &Config) -> Arc<Mutex<Self>> {
         let library = Library::new(&config.music);
-        let queue = Queue::from_library_shuffled(&library);
+        let queue = Queue::from_tracks_ordered(library.list_tracks(None));
         let (tx, rx) = mpsc::channel(16);
         let status = PlaybackStatus::default();
 
@@ -172,10 +179,8 @@ impl Crabbox {
         match cmd {
             Command::Play { filter } => {
                 let filter = filter.as_deref();
-                let filter_applied = self.apply_filter(filter);
-                if filter_applied {
-                    player.stop();
-                }
+                self.rebuild_queue(filter, QueueOrder::Ordered);
+                player.stop();
 
                 let track = self.queue.current_track();
 
@@ -186,14 +191,20 @@ impl Crabbox {
             }
             Command::PlayPause { filter } => {
                 let filter = filter.as_deref();
-                let filter_applied = self.apply_filter(filter);
-                if filter_applied {
+                let queue_rebuilt = if let Some(filter) = filter {
+                    self.rebuild_queue(Some(filter), QueueOrder::Ordered);
+                    true
+                } else {
+                    false
+                };
+
+                if queue_rebuilt {
                     player.stop();
                 }
 
                 let track = self.queue.current_track();
 
-                let toggle_result = if filter_applied {
+                let toggle_result = if queue_rebuilt {
                     match play_track(track, player) {
                         Some(track) => ToggleResult::Started(track),
                         None => ToggleResult::Stopped,
@@ -208,6 +219,18 @@ impl Crabbox {
                     ToggleResult::Toggled => {}
                 }
                 debug!(?filter, "Command received: PlayPause");
+            }
+            Command::Shuffle { filter } => {
+                let filter = filter.as_deref();
+                self.rebuild_queue(filter, QueueOrder::Shuffled);
+                player.stop();
+
+                let track = self.queue.current_track();
+
+                if let Some(track) = play_track(track, player) {
+                    self.status.current = Some(track);
+                    debug!(?filter, "Command received: Shuffle");
+                }
             }
             Command::Stop => {
                 player.stop();
@@ -233,19 +256,23 @@ impl Crabbox {
         }
     }
 
-    fn apply_filter(&mut self, filter: Option<&str>) -> bool {
-        let Some(filter) = filter else {
-            return false;
-        };
+    fn rebuild_queue(&mut self, filter: Option<&str>, order: QueueOrder) {
+        let tracks = self.library.list_tracks(filter.map(str::to_string));
 
-        let tracks = self.library.list_tracks(Some(filter.to_string()));
         if tracks.is_empty() {
-            warn!(filter, "Filter matched no tracks");
+            if let Some(filter) = filter {
+                warn!(filter, "Filter matched no tracks");
+            } else {
+                warn!("Library is empty");
+            }
         }
-        self.queue = Queue::from_tracks_shuffled(tracks);
+
+        self.queue = match order {
+            QueueOrder::Ordered => Queue::from_tracks_ordered(tracks),
+            QueueOrder::Shuffled => Queue::from_tracks_shuffled(tracks),
+        };
         self.queue.log();
         self.status.current = None;
-        true
     }
 }
 

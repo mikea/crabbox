@@ -71,6 +71,7 @@ fn parse_command(input: &str) -> Option<Command> {
     match command.as_str() {
         "PLAY" => Some(Command::Play { filter }),
         "PLAYPAUSE" => Some(Command::PlayPause { filter }),
+        "SHUFFLE" => Some(Command::Shuffle { filter }),
         "STOP" => Some(Command::Stop),
         "NEXT" => Some(Command::Next),
         "PREV" | "PREVIOUS" => Some(Command::Prev),
