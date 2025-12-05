@@ -62,6 +62,16 @@ To control via a named pipe:
   - `[server].pipe` — FIFO path for local command control (set to `null` to disable).
   - `[server].startup_sound` / `[server].shutdown_sound` — optional sounds to play on boot/shutdown.
   - `[rfid]` / `[rfid.tags]` — RC522 wiring and tag-to-command mappings (requires the `rpi` feature).
+  - `[gpio]` — all pins are optional; set the ones you wire (leave unset to disable GPIO input entirely).
+
+## Building
+
+- Native dev builds: `cargo check`, `cargo test`, and `cargo run -- server <config>` (see Justfile targets `check`, `test`, `server`).
+- Install native audio deps once on Debian/Ubuntu: `sudo apt-get install libasound2-dev`.
+- Cross-compiling for Raspberry Pi (aarch64):
+  1. Install cross: `cargo install --locked cross`.
+  2. Build: `cross build --target aarch64-unknown-linux-gnu --features rpi --release` (see `just build-rpi`).
+  3. The resulting binary lives at `target/aarch64-unknown-linux-gnu/release/crabbox`.
 
 ## Run as a systemd user service
 Place a unit file at `~/.config/systemd/user/crabbox.service` (create the directory if it does not exist):

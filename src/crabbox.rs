@@ -72,6 +72,13 @@ impl Queue {
         Self { tracks, current }
     }
 
+    fn empty() -> Self {
+        Self {
+            tracks: Vec::new(),
+            current: None,
+        }
+    }
+
     fn from_tracks_shuffled(mut tracks: Vec<PathBuf>) -> Self {
         tracks.shuffle(&mut rng());
         let current = if tracks.is_empty() { None } else { Some(0) };
@@ -140,7 +147,7 @@ enum QueueOrder {
 impl Crabbox {
     pub fn new(config: &Config) -> Arc<Mutex<Self>> {
         let library = Library::new(&config.music);
-        let queue = Queue::from_tracks_ordered(library.list_tracks(None));
+        let queue = Queue::empty();
         let (tx, rx) = mpsc::channel(16);
         let status = PlaybackStatus::default();
         let shutdown_sound = config.server.shutdown_sound.clone();

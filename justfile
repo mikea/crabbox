@@ -1,3 +1,5 @@
+import? 'justfile.local'
+
 alias w := watch
 
 watch *args="test":
@@ -24,7 +26,3 @@ deps:
 
 build-rpi:
     cross build --target aarch64-unknown-linux-gnu --features rpi --release
-
-deploy: build-rpi
-    rsync -avz target/aarch64-unknown-linux-gnu/release/crabbox jukebox.zt.aizatsky.com:/home/mike/crabbox/bin/crabbox 
-    ssh jukebox.zt.aizatsky.com 'systemctl --user restart crabbox.service'
