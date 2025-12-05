@@ -1,12 +1,18 @@
-Crabbox is a single-binary AI-assisted Rust rewrite of [RPi-Jukebox-RFID](https://github.com/MiczFlor/RPi-Jukebox-RFID).
+Crabbox is a single-binary RFID & GPIO-controlled jukebox for RaspberryPI
+
+Crabbox is AI-assisted Rust implementation inspired by [RPi-Jukebox-RFID](https://github.com/MiczFlor/RPi-Jukebox-RFID).
 
 ## Introduction
 
 Several years ago I have built a jukebox for my son based on [RPi-Jukebox-RFID](https://github.com/MiczFlor/RPi-Jukebox-RFID).
 
-Unfortunately, when my SD card fully died I discovered that the original software is stale and doesn't
-work even on bookworm (it is Trixie era at the time of the writing). After fighting buster image I decided
-to rewrite all of it from scratch in Rust using Codex.
+Unfortunately, when SD card completely died I discovered that the  software is stale and doesn't
+work even on bookworm (it is already Trixie era at the time of the writing). 
+I engaged Codex to recreate the needed functionality from scratch.
+
+## Status
+
+I run this on my son's `Crabbox I` device (see picture below).
 
 ## Requirements
 
@@ -51,8 +57,8 @@ To control via a named pipe:
 ### RFID and command mapping
 
 - Enable the `rpi` feature and configure `[rfid]` with your RC522 pins (`bus`, `irq`, optional `reset`).
-- Map tag IDs to command strings under `[rfid.tags]`, e.g. `0A1B2C3D = "PLAY"`, `ABCD1234 = "SHUFFLE kids/*"`.
-- RFID tags can trigger the same commands as the pipe or web UI; filters/globs work the same way.
+- Map tag IDs to command strings under top-level `[tags]`, e.g. `0A1B2C3D = "PLAY"`, `ABCD1234 = "SHUFFLE kids/*"`.
+- RFID tags can trigger the same commands as the pipe or web UI; filters/globs work the same way. The last seen tag is shown on the web UI.
 
 ## Configuration
 - Create a TOML config file (see `config.toml` for an example) and point the service to it. At minimum you need one `[[music]]` directory and a `[server]` section.
@@ -61,7 +67,8 @@ To control via a named pipe:
   - `[server].web` — listen address for the web UI/API.
   - `[server].pipe` — FIFO path for local command control (set to `null` to disable).
   - `[server].startup_sound` / `[server].shutdown_sound` — optional sounds to play on boot/shutdown.
-  - `[rfid]` / `[rfid.tags]` — RC522 wiring and tag-to-command mappings (requires the `rpi` feature).
+  - `[rfid]` — RC522 wiring (requires the `rpi` feature).
+  - `[tags]` — global tag-to-command mappings (used by RFID or other tag sources).
   - `[gpio]` — all pins are optional; set the ones you wire (leave unset to disable GPIO input entirely).
 
 ## Building
@@ -96,3 +103,8 @@ WantedBy=default.target
 - Reload systemd and start the service: `systemctl --user daemon-reload` then `systemctl --user enable --now crabbox.service`.
 - View logs with `journalctl --user -u crabbox -f`. Stop or restart with `systemctl --user stop|restart crabbox.service`.
 - To have the user service start at boot without logging in, enable lingering once: `loginctl enable-linger $USER`.
+
+
+# Crabbox I
+
+![crabbox](crabbox.jpg)

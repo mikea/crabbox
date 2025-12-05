@@ -39,7 +39,7 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
 async fn index(State(state): State<AppState>) -> Html<String> {
     let snapshot = state.crabbox.lock().ok().map(|c| c.snapshot());
 
-    let (current, queue, queue_position, library) = match snapshot {
+    let (current, queue, queue_position, library, last_tag) = match snapshot {
         Some(snapshot) => (
             snapshot
                 .current
@@ -48,8 +48,15 @@ async fn index(State(state): State<AppState>) -> Html<String> {
             snapshot.queue,
             snapshot.queue_position,
             snapshot.library,
+            snapshot.last_tag,
         ),
-        None => ("Unavailable".to_string(), Vec::new(), None, Vec::new()),
+        None => (
+            "Unavailable".to_string(),
+            Vec::new(),
+            None,
+            Vec::new(),
+            None,
+        ),
     };
 
     let queue_html = if queue.is_empty() {
@@ -81,6 +88,9 @@ async fn index(State(state): State<AppState>) -> Html<String> {
     };
 
     let current_display = escape_html(&current);
+    let last_tag_display = last_tag
+        .map(|tag| escape_html(&tag.to_string()))
+        .unwrap_or_else(|| "None".to_string());
 
     let page = format!(
         r#"<!doctype html>
@@ -110,6 +120,7 @@ async fn index(State(state): State<AppState>) -> Html<String> {
     <h1>Crabbox</h1>
     <div class="section">
       <p>Current track: <span class="muted">{current_display}</span></p>
+      <p>Last tag: <span class="muted">{last_tag_display}</span></p>
       <div class="controls">
         <form method="post" action="/play">
           <button type="submit">Play</button>

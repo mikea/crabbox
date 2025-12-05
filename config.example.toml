@@ -22,6 +22,12 @@ web = "0.0.0.0:8080"
 startup_sound = "/path/to/startup.mp3"
 shutdown_sound = "/path/to/shutdown.mp3"
 
+# Map RFID tag IDs (8 hex chars) to commands. Commands support the same syntax as the pipe/web UI.
+[tags]
+0A1B2C3D = "PLAY"
+11223344 = "SHUFFLE chill/*"
+DEADBEEF = "SHUTDOWN"
+
 # Raspberry Pi only (enabled with the `rpi` feature).
 [gpio]
 # Optional: set any pins you want to enable; leave unset to disable GPIO input entirely.
@@ -42,9 +48,3 @@ bus = 0
 irq = 5
 # Optional reset pin; omit or set to null if not wired.
 reset = 6
-
-# Map RFID tag IDs (8 hex chars) to commands.
-[rfid.tags]
-0A1B2C3D = "PLAY"
-11223344 = "SHUFFLE chill/*"
-DEADBEEF = "SHUTDOWN"

@@ -2,6 +2,8 @@ use std::str::FromStr;
 
 use serde::Deserialize;
 
+use crate::tag::TagId;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Play { filter: Option<String> },
@@ -13,6 +15,7 @@ pub enum Command {
     VolumeUp,
     VolumeDown,
     Shutdown,
+    Tag { id: TagId },
 }
 
 impl FromStr for Command {

@@ -1,12 +1,10 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
 
-#[cfg(feature = "rpi")]
-use crate::{commands::Command, rfid::TagId};
-#[cfg(feature = "rpi")]
-use std::collections::HashMap;
+use crate::{commands::Command, tag::TagId};
 
 use serde::Deserialize;
 
@@ -17,6 +15,8 @@ pub struct Config {
     pub server: ServerConfig,
     #[serde(default = "default_volume")]
     pub default_volume: f32,
+    #[serde(default)]
+    pub tags: HashMap<TagId, Command>,
     #[cfg(feature = "rpi")]
     pub gpio: Option<GpioConfig>,
     #[cfg(feature = "rpi")]
@@ -64,8 +64,6 @@ pub struct RfidConfig {
     pub irq: u8,
     #[serde(default)]
     pub reset: Option<u8>,
-    #[serde(default)]
-    pub tags: HashMap<TagId, Command>,
 }
 
 impl Config {

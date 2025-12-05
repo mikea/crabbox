@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
     thread,
@@ -14,11 +15,13 @@ use crate::{
     config::{Config, MusicDirectory},
     glob::Glob,
     player::{Player, ToggleResult, play_blocking, play_track, toggle_play_pause},
+    tag::TagId,
 };
 
 #[derive(Default)]
 struct PlaybackStatus {
     current: Option<PathBuf>,
+    last_tag: Option<TagId>,
 }
 
 #[derive(Clone, Default)]
@@ -27,6 +30,7 @@ pub struct CrabboxSnapshot {
     pub queue: Vec<PathBuf>,
     pub queue_position: Option<usize>,
     pub library: Vec<PathBuf>,
+    pub last_tag: Option<TagId>,
 }
 
 #[derive(Clone, Default)]
@@ -133,6 +137,7 @@ impl Queue {
 pub struct Crabbox {
     pub library: Library,
     pub queue: Queue,
+    tags: HashMap<TagId, Command>,
     command_tx: mpsc::Sender<Command>,
     status: PlaybackStatus,
     shutdown_sound: Option<PathBuf>,
@@ -148,6 +153,7 @@ impl Crabbox {
     pub fn new(config: &Config) -> Arc<Mutex<Self>> {
         let library = Library::new(&config.music);
         let queue = Queue::empty();
+        let tags = config.tags.clone();
         let (tx, rx) = mpsc::channel(16);
         let status = PlaybackStatus::default();
         let shutdown_sound = config.server.shutdown_sound.clone();
@@ -156,6 +162,7 @@ impl Crabbox {
         let crabbox = Arc::new(Mutex::new(Self {
             library,
             queue,
+            tags,
             command_tx: tx,
             status,
             shutdown_sound,
@@ -189,6 +196,7 @@ impl Crabbox {
             queue: self.queue.tracks.clone(),
             queue_position: self.queue.current,
             library: self.library.list_tracks(None),
+            last_tag: self.status.last_tag,
         }
     }
 
@@ -289,6 +297,16 @@ impl Crabbox {
                 }
                 if let Err(err) = shutdown_now() {
                     warn!("Failed to trigger shutdown: {err}");
+                }
+            }
+            Command::Tag { id } => {
+                self.status.last_tag = Some(id);
+                match self.tags.get(&id).cloned() {
+                    Some(Command::Tag { .. }) => {
+                        warn!(?id, "Tag is mapped to another tag command; ignoring");
+                    }
+                    Some(mapped) => self.process_command(mapped, player),
+                    None => debug!(?id, "No command mapped for tag"),
                 }
             }
         }
