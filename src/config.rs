@@ -3,6 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[cfg(feature = "rpi")]
+use crate::{commands::Command, rfid::TagId};
+#[cfg(feature = "rpi")]
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -56,6 +61,8 @@ pub struct RfidConfig {
     pub irq: u8,
     #[serde(default)]
     pub reset: Option<u8>,
+    #[serde(default)]
+    pub tags: HashMap<TagId, Command>,
 }
 
 impl Config {

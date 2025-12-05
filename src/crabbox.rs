@@ -10,23 +10,11 @@ use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
 use crate::{
+    commands::Command,
     config::{Config, MusicDirectory},
     glob::Glob,
     player::{Player, ToggleResult, play_track, toggle_play_pause},
 };
-
-#[derive(Debug, Clone)]
-pub enum Command {
-    Play { filter: Option<String> },
-    PlayPause { filter: Option<String> },
-    Shuffle { filter: Option<String> },
-    Stop,
-    Next,
-    Prev,
-    VolumeUp,
-    VolumeDown,
-    Shutdown,
-}
 
 #[derive(Default)]
 struct PlaybackStatus {

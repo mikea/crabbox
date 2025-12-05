@@ -1,8 +1,9 @@
 #![cfg(feature = "rpi")]
 
 use std::{
+    collections::HashMap,
     error::Error,
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, Mutex, mpsc as std_mpsc},
     thread,
     time::Duration,
 };
@@ -11,9 +12,12 @@ use rppal::{
     gpio::{Gpio, InputPin, OutputPin, Trigger},
     spi::{Bus, Mode, SlaveSelect, Spi},
 };
+use serde::Deserialize;
 use tracing::{debug, error, info};
 
-use crate::config::RfidConfig;
+use tokio::sync::mpsc;
+
+use crate::{commands::Command, config::RfidConfig};
 
 const PCD_TRANSCEIVE: u8 = 0x0C;
 const PCD_RESETPHASE: u8 = 0x0F;
@@ -36,6 +40,57 @@ const T_PRESCALER_REG: u8 = 0x2B;
 const T_RELOAD_REG_H: u8 = 0x2C;
 const T_RELOAD_REG_L: u8 = 0x2D;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TagId([u8; 4]);
+
+impl TagId {
+    pub fn from_uid(uid: [u8; 4]) -> Self {
+        Self(uid)
+    }
+
+    fn from_hex_str(s: &str) -> Result<Self, String> {
+        let trimmed = s.trim();
+        if trimmed.len() != 8 {
+            return Err("RFID tag IDs must be 8 hexadecimal characters".to_string());
+        }
+
+        let bytes = trimmed
+            .as_bytes()
+            .chunks(2)
+            .map(std::str::from_utf8)
+            .map(|chunk| chunk.map_err(|err| err.to_string()))
+            .map(|res| {
+                res.and_then(|hex| u8::from_str_radix(hex, 16).map_err(|err| err.to_string()))
+            })
+            .collect::<Result<Vec<u8>, String>>()?;
+
+        let bytes: [u8; 4] = bytes
+            .try_into()
+            .map_err(|_| "RFID tag IDs must be exactly 4 bytes (8 hex chars)".to_string())?;
+
+        Ok(Self(bytes))
+    }
+}
+
+impl std::fmt::Display for TagId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in self.0 {
+            write!(f, "{byte:02X}")?;
+        }
+        Ok(())
+    }
+}
+
+impl<'de> Deserialize<'de> for TagId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        TagId::from_hex_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 pub struct Reader {
     _irq_pin: InputPin,
     _reset_pin: Option<OutputPin>,
@@ -43,7 +98,10 @@ pub struct Reader {
 }
 
 impl Reader {
-    pub fn new(config: &RfidConfig) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        config: &RfidConfig,
+        command_tx: mpsc::Sender<Command>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let (bus, slave_select) = resolve_spi(config)?;
         let spi = Spi::new(bus, slave_select, 1_000_000, Mode::Mode0)?;
         let spi = Arc::new(Mutex::new(spi));
@@ -60,7 +118,7 @@ impl Reader {
             None
         };
 
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = std_mpsc::channel();
         let trigger_tx = tx.clone();
 
         irq_pin.set_async_interrupt(Trigger::FallingEdge, None, move |_level| {
@@ -69,6 +127,8 @@ impl Reader {
 
         // Kick off an initial poll in case the IRQ line is already low.
         let _ = tx.send(());
+
+        let tags = config.tags.clone();
 
         let worker = thread::spawn({
             move || {
@@ -80,12 +140,12 @@ impl Reader {
 
                 loop {
                     match rx.recv_timeout(Duration::from_millis(500)) {
-                        Ok(_) | Err(mpsc::RecvTimeoutError::Timeout) => {}
-                        Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                        Ok(_) | Err(std_mpsc::RecvTimeoutError::Timeout) => {}
+                        Err(std_mpsc::RecvTimeoutError::Disconnected) => break,
                     }
 
                     match rc522.poll_for_tag() {
-                        Ok(Some(uid)) => info!("RFID tag detected UID {:02X?}", uid),
+                        Ok(Some(uid)) => handle_tag(&tags, &uid, &command_tx),
                         Ok(None) => {}
                         Err(err) => error!("RFID poll failed: {err}"),
                     }
@@ -100,6 +160,38 @@ impl Reader {
             _reset_pin: reset_pin,
             worker: Some(worker),
         })
+    }
+}
+
+fn handle_tag(tags: &HashMap<TagId, Command>, uid: &[u8; 4], command_tx: &mpsc::Sender<Command>) {
+    let tag_id = TagId::from_uid(*uid);
+    info!("RFID tag detected UID {tag_id}");
+
+    let Some(command) = tags.get(&tag_id) else {
+        debug!("No command configured for RFID tag {tag_id}");
+        return;
+    };
+
+    if let Err(err) = command_tx.blocking_send(command.clone()) {
+        error!("Failed to send command for RFID tag {tag_id}: {err}");
+    } else {
+        info!("Sent command for RFID tag {tag_id}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tag_id_parses_hex() {
+        let tag = TagId::from_hex_str("0a1b2c3d").expect("valid hex");
+        assert_eq!(format!("{tag}"), "0A1B2C3D");
+    }
+
+    #[test]
+    fn tag_id_rejects_wrong_length() {
+        assert!(TagId::from_hex_str("123").is_err());
     }
 }
 

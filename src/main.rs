@@ -12,6 +12,7 @@ use clap::{Args, Parser, Subcommand};
 use tracing::{error, info};
 use tracing_subscriber::FmtSubscriber;
 
+mod commands;
 mod config;
 mod crabbox;
 mod glob;
@@ -110,7 +111,8 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     };
     #[cfg(feature = "rpi")]
     let _rfid_reader = if let Some(rfid_cfg) = config.rfid.as_ref() {
-        Some(Reader::new(rfid_cfg)?)
+        let command_sender = crabbox.lock().expect("crabbox lock poisoned").sender();
+        Some(Reader::new(rfid_cfg, command_sender)?)
     } else {
         None
     };

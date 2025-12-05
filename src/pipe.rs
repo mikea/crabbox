@@ -12,10 +12,7 @@ use tokio::{
     task,
 };
 
-use crate::{
-    AnyResult,
-    crabbox::{Command, Crabbox},
-};
+use crate::{AnyResult, commands::parse_command, crabbox::Crabbox};
 
 pub async fn serve_control_pipe(
     socket_path: PathBuf,
@@ -56,29 +53,6 @@ pub async fn serve_control_pipe(
         };
 
         let _ = sender.send(cmd).await;
-    }
-}
-
-fn parse_command(input: &str) -> Option<Command> {
-    let mut parts = input.trim().splitn(2, char::is_whitespace);
-    let command = parts.next()?.to_ascii_uppercase();
-    let filter = parts
-        .next()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned);
-
-    match command.as_str() {
-        "PLAY" => Some(Command::Play { filter }),
-        "PLAYPAUSE" => Some(Command::PlayPause { filter }),
-        "SHUFFLE" => Some(Command::Shuffle { filter }),
-        "STOP" => Some(Command::Stop),
-        "NEXT" => Some(Command::Next),
-        "PREV" | "PREVIOUS" => Some(Command::Prev),
-        "SHUTDOWN" => Some(Command::Shutdown),
-        "VOLUMEUP" => Some(Command::VolumeUp),
-        "VOLUMEDOWN" => Some(Command::VolumeDown),
-        _ => None,
     }
 }
 

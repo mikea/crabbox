@@ -9,10 +9,7 @@ use std::{
 use rppal::gpio::{Gpio, InputPin, Trigger};
 use tracing::{debug, error, info};
 
-use crate::{
-    config::GpioConfig,
-    crabbox::{Command, Crabbox},
-};
+use crate::{commands::Command, config::GpioConfig, crabbox::Crabbox};
 
 pub struct Button {
     _pin: InputPin,

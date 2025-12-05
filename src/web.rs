@@ -11,10 +11,7 @@ use axum::{
 };
 use tokio::net::TcpListener;
 
-use crate::{
-    AnyResult,
-    crabbox::{Command, Crabbox},
-};
+use crate::{AnyResult, commands::Command, crabbox::Crabbox};
 
 pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
     let state = AppState { crabbox };
