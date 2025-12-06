@@ -1,6 +1,7 @@
 use std::{
     fs::File,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use rodio::{OutputStream, OutputStreamBuilder, Sink};
@@ -15,7 +16,7 @@ pub const MAX_VOLUME: f32 = 1.0;
 pub const MIN_VOLUME: f32 = 0.01;
 
 pub struct Player {
-    sink: Option<Sink>,
+    sink: Option<Arc<Sink>>,
     stream: Option<OutputStream>,
     volume: f32,
     track_end_task: Option<JoinHandle<()>>,
@@ -49,7 +50,7 @@ impl Player {
         sink.set_volume(self.volume);
 
         self.stream = Some(stream);
-        self.sink = Some(sink);
+        self.sink = Some(Arc::new(sink));
 
         if notify {
             self.watch_for_track_end();
@@ -71,17 +72,20 @@ impl Player {
     }
 
     pub fn is_paused(&self) -> bool {
-        self.sink.as_ref().map(Sink::is_paused).unwrap_or(false)
+        self.sink
+            .as_ref()
+            .map(|s| Sink::is_paused(s.as_ref()))
+            .unwrap_or(false)
     }
 
     pub fn pause(&mut self) {
-        if let Some(sink) = self.sink.as_ref() {
+        if let Some(sink) = self.sink.as_deref() {
             sink.pause();
         }
     }
 
     pub fn resume(&mut self) {
-        if let Some(sink) = self.sink.as_ref() {
+        if let Some(sink) = self.sink.as_deref() {
             sink.play();
         }
     }
@@ -97,7 +101,7 @@ impl Player {
     fn adjust_volume(&mut self, delta: f32) {
         let new_volume = (self.volume + delta).clamp(MIN_VOLUME, MAX_VOLUME);
         self.volume = new_volume;
-        if let Some(sink) = self.sink.as_ref() {
+        if let Some(sink) = self.sink.as_deref() {
             sink.set_volume(new_volume);
         }
         info!("Volume set to {:.2}", new_volume);
