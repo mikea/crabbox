@@ -19,24 +19,17 @@ pub struct Player {
     stream: Option<OutputStream>,
     volume: f32,
     track_end_task: Option<JoinHandle<()>>,
-}
-
-impl Default for Player {
-    fn default() -> Self {
-        Self {
-            sink: None,
-            stream: None,
-            volume: 1.0,
-            track_end_task: None,
-        }
-    }
+    command_sender: mpsc::Sender<Command>,
 }
 
 impl Player {
-    pub fn new(volume: f32) -> Self {
+    pub fn new(volume: f32, command_sender: mpsc::Sender<Command>) -> Self {
         Self {
             volume,
-            ..Default::default()
+            sink: None,
+            stream: None,
+            track_end_task: None,
+            command_sender,
         }
     }
 
@@ -45,7 +38,7 @@ impl Player {
             .map_err(|err| format!("Failed to open default audio output: {err}"))
     }
 
-    pub fn play(&mut self, track: &Path) -> Result<(), String> {
+    pub fn play(&mut self, track: &Path, notify: bool) -> Result<(), String> {
         let stream = self.new_stream()?;
 
         let file = File::open(track)
@@ -57,6 +50,10 @@ impl Player {
 
         self.stream = Some(stream);
         self.sink = Some(sink);
+
+        if notify {
+            self.watch_for_track_end();
+        }
 
         Ok(())
     }
@@ -112,12 +109,14 @@ impl Player {
         }
     }
 
-    pub fn watch_for_track_end(&mut self, sender: mpsc::Sender<Command>) {
+    pub fn watch_for_track_end(&mut self) {
         self.cancel_track_end_task();
 
         let Some(sink) = self.sink.as_ref().cloned() else {
             return;
         };
+
+        let sender = self.command_sender.clone();
 
         let handle = task::spawn(async move {
             let wait_result = task::spawn_blocking(move || sink.sleep_until_end()).await;
@@ -137,7 +136,7 @@ impl Player {
     }
 }
 
-pub fn play_track(track: Option<PathBuf>, player: &mut Player) -> Option<PathBuf> {
+pub fn play_track(track: Option<PathBuf>, player: &mut Player, notify: bool) -> Option<PathBuf> {
     let Some(track) = track else {
         error!("No tracks available to play");
         return None;
@@ -145,7 +144,7 @@ pub fn play_track(track: Option<PathBuf>, player: &mut Player) -> Option<PathBuf
 
     player.stop();
 
-    match player.play(track.as_path()) {
+    match player.play(track.as_path(), notify) {
         Ok(()) => Some(track),
         Err(err) => {
             error!("{err}");
@@ -154,7 +153,11 @@ pub fn play_track(track: Option<PathBuf>, player: &mut Player) -> Option<PathBuf
     }
 }
 
-pub fn toggle_play_pause(track: Option<PathBuf>, player: &mut Player) -> ToggleResult {
+pub fn toggle_play_pause(
+    track: Option<PathBuf>,
+    player: &mut Player,
+    notify: bool,
+) -> ToggleResult {
     if player.has_sink() {
         if player.is_paused() {
             player.resume();
@@ -163,7 +166,7 @@ pub fn toggle_play_pause(track: Option<PathBuf>, player: &mut Player) -> ToggleR
         }
         ToggleResult::Toggled
     } else {
-        match play_track(track, player) {
+        match play_track(track, player, notify) {
             Some(track) => ToggleResult::Started(track),
             None => ToggleResult::Stopped,
         }
@@ -177,8 +180,9 @@ pub enum ToggleResult {
 }
 
 pub fn play_blocking(track: &Path, volume: f32) -> Result<(), String> {
-    let mut player = Player::new(volume);
-    player.play(track)?;
+    let (tx, _rx) = mpsc::channel(1);
+    let mut player = Player::new(volume, tx);
+    player.play(track, false)?;
     player.wait_until_end();
     Ok(())
 }

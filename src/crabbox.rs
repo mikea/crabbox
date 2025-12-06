@@ -228,19 +228,17 @@ impl Crabbox {
                 let track = self.queue.current_track();
 
                 let toggle_result = if queue_rebuilt {
-                    match play_track(track, player) {
+                    match play_track(track, player, true) {
                         Some(track) => ToggleResult::Started(track),
                         None => ToggleResult::Stopped,
                     }
                 } else {
-                    toggle_play_pause(track, player)
+                    toggle_play_pause(track, player, true)
                 };
 
                 match toggle_result {
                     ToggleResult::Started(track) => {
                         self.status.current = Some(track.clone());
-                        let sender = self.command_tx.clone();
-                        player.watch_for_track_end(sender);
                     }
                     ToggleResult::Stopped => self.status.current = None,
                     ToggleResult::Toggled => {}
@@ -315,11 +313,9 @@ impl Crabbox {
     }
 
     fn play_queue_track(&mut self, track: Option<PathBuf>, player: &mut Player) {
-        match play_track(track, player) {
+        match play_track(track, player, true) {
             Some(track) => {
                 self.status.current = Some(track.clone());
-                let sender = self.command_tx.clone();
-                player.watch_for_track_end(sender);
             }
             None => self.status.current = None,
         }
@@ -350,7 +346,11 @@ async fn process_commands(
     crabbox: Arc<Mutex<Crabbox>>,
     default_volume: f32,
 ) {
-    let mut player = Player::new(default_volume);
+    let sender = {
+        let crabbox = crabbox.lock().expect("failed to lock crabbox");
+        crabbox.command_tx.clone()
+    };
+    let mut player = Player::new(default_volume, sender);
 
     while let Some(cmd) = rx.recv().await {
         if let Ok(mut crabbox) = crabbox.lock() {
