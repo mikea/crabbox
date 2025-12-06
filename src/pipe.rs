@@ -3,7 +3,6 @@ use std::{
     fs,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
 };
 
 use tokio::{
@@ -12,11 +11,16 @@ use tokio::{
     task,
 };
 
-use crate::{AnyResult, commands::parse_command, crabbox::Crabbox};
+use tokio::sync::mpsc;
+
+use crate::{
+    AnyResult,
+    commands::{Command, parse_command},
+};
 
 pub async fn serve_control_pipe(
     socket_path: PathBuf,
-    crabbox: Arc<Mutex<Crabbox>>,
+    sender: mpsc::Sender<Command>,
 ) -> AnyResult<()> {
     if socket_path.exists() {
         fs::remove_file(&socket_path)?;
@@ -36,8 +40,6 @@ pub async fn serve_control_pipe(
     let mut reader = BufReader::new(file);
     let mut line = String::new();
 
-    let sender = crabbox.lock().ok().map(|c| c.sender());
-
     loop {
         line.clear();
         let bytes = reader.read_line(&mut line).await?;
@@ -46,9 +48,6 @@ pub async fn serve_control_pipe(
         }
 
         let Some(cmd) = parse_command(line.trim()) else {
-            continue;
-        };
-        let Some(sender) = sender.as_ref() else {
             continue;
         };
 
