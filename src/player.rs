@@ -4,7 +4,11 @@ use std::{
 };
 
 use rodio::{OutputStream, OutputStreamBuilder, Sink};
+use tokio::task::JoinHandle;
+use tokio::{sync::mpsc, task};
 use tracing::{error, info};
+
+use crate::commands::Command;
 
 pub const VOLUME_STEP: f32 = 0.05;
 pub const MAX_VOLUME: f32 = 1.0;
@@ -14,6 +18,7 @@ pub struct Player {
     sink: Option<Sink>,
     stream: Option<OutputStream>,
     volume: f32,
+    track_end_task: Option<JoinHandle<()>>,
 }
 
 impl Default for Player {
@@ -22,6 +27,7 @@ impl Default for Player {
             sink: None,
             stream: None,
             volume: 1.0,
+            track_end_task: None,
         }
     }
 }
@@ -56,6 +62,7 @@ impl Player {
     }
 
     pub fn stop(&mut self) {
+        self.cancel_track_end_task();
         if let Some(sink) = self.sink.take() {
             sink.stop();
         }
@@ -97,6 +104,30 @@ impl Player {
             sink.set_volume(new_volume);
         }
         info!("Volume set to {:.2}", new_volume);
+    }
+
+    fn cancel_track_end_task(&mut self) {
+        if let Some(task) = self.track_end_task.take() {
+            task.abort();
+        }
+    }
+
+    pub fn watch_for_track_end(&mut self, sender: mpsc::Sender<Command>) {
+        self.cancel_track_end_task();
+
+        let Some(sink) = self.sink.as_ref().cloned() else {
+            return;
+        };
+
+        let handle = task::spawn(async move {
+            let wait_result = task::spawn_blocking(move || sink.sleep_until_end()).await;
+
+            if wait_result.is_ok() {
+                let _ = sender.send(Command::TrackDone).await;
+            }
+        });
+
+        self.track_end_task = Some(handle);
     }
 
     pub fn wait_until_end(&self) {
