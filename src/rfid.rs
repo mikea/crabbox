@@ -1,5 +1,3 @@
-#![cfg(feature = "rpi")]
-
 use std::{
     error::Error,
     sync::{Arc, Mutex, mpsc as std_mpsc},
@@ -83,14 +81,11 @@ impl Reader {
                     return;
                 }
 
-                loop {
-                    match rx.recv_timeout(Duration::from_millis(500)) {
-                        Ok(_) | Err(std_mpsc::RecvTimeoutError::Timeout) => {}
-                        Err(std_mpsc::RecvTimeoutError::Disconnected) => break,
-                    }
-
+                while let Ok(()) | Err(std_mpsc::RecvTimeoutError::Timeout) =
+                    rx.recv_timeout(Duration::from_millis(500))
+                {
                     match rc522.poll_for_tag() {
-                        Ok(Some(uid)) => handle_tag(&uid, &command_tx),
+                        Ok(Some(uid)) => handle_tag(uid, &command_tx),
                         Ok(None) => {}
                         Err(err) => error!("RFID poll failed: {err}"),
                     }
@@ -108,8 +103,8 @@ impl Reader {
     }
 }
 
-fn handle_tag(uid: &[u8; 4], command_tx: &mpsc::Sender<Command>) {
-    let tag_id = TagId::from_uid(*uid);
+fn handle_tag(uid: [u8; 4], command_tx: &mpsc::Sender<Command>) {
+    let tag_id = TagId::from_uid(uid);
     info!("RFID tag detected UID {tag_id}");
 
     if let Err(err) = command_tx.blocking_send(Command::Tag { id: tag_id }) {
@@ -289,11 +284,9 @@ fn resolve_spi(config: &RfidConfig) -> Result<(Bus, SlaveSelect), Box<dyn Error 
         5 => Bus::Spi5,
         6 => Bus::Spi6,
         other => {
-            return Err(format!(
-                "Unsupported SPI bus {}. Supported buses are 0 through 6.",
-                other
-            )
-            .into());
+            return Err(
+                format!("Unsupported SPI bus {other}. Supported buses are 0 through 6.").into(),
+            );
         }
     };
 

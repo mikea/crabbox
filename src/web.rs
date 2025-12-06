@@ -1,5 +1,6 @@
 use std::{
     net::SocketAddr,
+    fmt::Write as _,
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -36,15 +37,16 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn index(State(state): State<AppState>) -> Html<String> {
     let snapshot = state.crabbox.lock().ok().map(|c| c.snapshot());
 
     let (current, queue, queue_position, library, last_tag) = match snapshot {
         Some(snapshot) => (
-            snapshot
-                .current
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|| "Nothing playing".to_string()),
+            snapshot.current.map_or_else(
+                || "Nothing playing".to_string(),
+                |p| p.display().to_string(),
+            ),
             snapshot.queue,
             snapshot.queue_position,
             snapshot.library,
@@ -66,9 +68,9 @@ async fn index(State(state): State<AppState>) -> Html<String> {
         for (idx, track) in queue.iter().enumerate() {
             let display = escape_html(&track.display().to_string());
             if queue_position == Some(idx) {
-                html.push_str(&format!("<li><strong>{display}</strong></li>"));
+                let _ = write!(html, "<li><strong>{display}</strong></li>");
             } else {
-                html.push_str(&format!("<li>{display}</li>"));
+                let _ = write!(html, "<li>{display}</li>");
             }
         }
         html.push_str("</ol>");
@@ -81,16 +83,15 @@ async fn index(State(state): State<AppState>) -> Html<String> {
         let mut html = String::from("<ul class=\"library\">");
         for track in library {
             let display = escape_html(&track.display().to_string());
-            html.push_str(&format!("<li>{display}</li>"));
+            let _ = write!(html, "<li>{display}</li>");
         }
         html.push_str("</ul>");
         html
     };
 
     let current_display = escape_html(&current);
-    let last_tag_display = last_tag
-        .map(|tag| escape_html(&tag.to_string()))
-        .unwrap_or_else(|| "None".to_string());
+    let last_tag_display =
+        last_tag.map_or_else(|| "None".to_string(), |tag| escape_html(&tag.to_string()));
 
     let page = format!(
         r#"<!doctype html>

@@ -1,5 +1,3 @@
-#![cfg(feature = "rpi")]
-
 use std::{
     sync::{Arc, Mutex},
     thread,
@@ -65,18 +63,19 @@ impl LongPressButton {
 }
 
 pub struct GpioController {
-    _play_button: Option<Button>,
-    _next_button: Option<Button>,
-    _prev_button: Option<Button>,
-    _volume_up_button: Option<Button>,
-    _volume_down_button: Option<Button>,
-    _shutdown_button: Option<LongPressButton>,
+    _play: Option<Button>,
+    _next: Option<Button>,
+    _prev: Option<Button>,
+    _volume_up: Option<Button>,
+    _volume_down: Option<Button>,
+    _shutdown: Option<LongPressButton>,
 }
 
 impl GpioController {
+    #[allow(clippy::too_many_lines)]
     pub fn new(
         config: &GpioConfig,
-        command_tx: mpsc::Sender<Command>,
+        command_tx: &mpsc::Sender<Command>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let pins_configured = config.play.is_some()
             || config.next.is_some()
@@ -88,19 +87,19 @@ impl GpioController {
         if !pins_configured {
             info!("GPIO control disabled: no pins configured");
             return Ok(Self {
-                _play_button: None,
-                _next_button: None,
-                _prev_button: None,
-                _volume_up_button: None,
-                _volume_down_button: None,
-                _shutdown_button: None,
+                _play: None,
+                _next: None,
+                _prev: None,
+                _volume_up: None,
+                _volume_down: None,
+                _shutdown: None,
             });
         }
 
         let gpio = Gpio::new()?;
         let debounce_duration = Duration::from_millis(config.debounce_ms);
 
-        let play_button = config
+        let play = config
             .play
             .map(|pin| {
                 Button::new(
@@ -108,7 +107,7 @@ impl GpioController {
                     pin,
                     debounce_duration,
                     make_sender(
-                        &command_tx,
+                        command_tx,
                         Command::PlayPause { filter: None },
                         "PlayPause",
                     ),
@@ -116,55 +115,55 @@ impl GpioController {
             })
             .transpose()?;
 
-        let next_button = config
+        let next = config
             .next
             .map(|pin| {
                 Button::new(
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&command_tx, Command::Next, "Next"),
+                    make_sender(command_tx, Command::Next, "Next"),
                 )
             })
             .transpose()?;
 
-        let prev_button = config
+        let prev = config
             .prev
             .map(|pin| {
                 Button::new(
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&command_tx, Command::Prev, "Prev"),
+                    make_sender(command_tx, Command::Prev, "Prev"),
                 )
             })
             .transpose()?;
 
-        let volume_up_button = config
+        let volume_up = config
             .volume_up
             .map(|pin| {
                 Button::new(
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&command_tx, Command::VolumeUp, "VolumeUp"),
+                    make_sender(command_tx, Command::VolumeUp, "VolumeUp"),
                 )
             })
             .transpose()?;
 
-        let volume_down_button = config
+        let volume_down = config
             .volume_down
             .map(|pin| {
                 Button::new(
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&command_tx, Command::VolumeDown, "VolumeDown"),
+                    make_sender(command_tx, Command::VolumeDown, "VolumeDown"),
                 )
             })
             .transpose()?;
 
-        let shutdown_button = config
+        let shutdown = config
             .shutdown
             .map(|pin| {
                 LongPressButton::new(
@@ -173,7 +172,7 @@ impl GpioController {
                     debounce_duration,
                     Duration::from_secs(5),
                     Arc::new(make_sender(
-                        &command_tx,
+                        command_tx,
                         Command::Shutdown,
                         "Shutdown (long press)",
                     )),
@@ -201,12 +200,12 @@ impl GpioController {
         }
 
         Ok(Self {
-            _play_button: play_button,
-            _next_button: next_button,
-            _prev_button: prev_button,
-            _volume_up_button: volume_up_button,
-            _volume_down_button: volume_down_button,
-            _shutdown_button: shutdown_button,
+            _play: play,
+            _next: next,
+            _prev: prev,
+            _volume_up: volume_up,
+            _volume_down: volume_down,
+            _shutdown: shutdown,
         })
     }
 }

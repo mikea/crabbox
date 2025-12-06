@@ -90,24 +90,24 @@ impl Config {
             .into());
         }
 
-        if let Some(sound) = &config.server.startup_sound {
-            if !sound.is_file() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "startup_sound must point to an existing file",
-                )
-                .into());
-            }
+        if let Some(sound) = &config.server.startup_sound
+            && sound.is_file()
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "startup_sound must point to an existing file",
+            )
+            .into());
         }
 
-        if let Some(sound) = &config.server.shutdown_sound {
-            if !sound.is_file() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "shutdown_sound must point to an existing file",
-                )
-                .into());
-            }
+        if let Some(sound) = &config.server.shutdown_sound
+            && !sound.is_file()
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "shutdown_sound must point to an existing file",
+            )
+            .into());
         }
 
         #[cfg(feature = "rpi")]

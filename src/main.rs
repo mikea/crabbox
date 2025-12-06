@@ -108,7 +108,7 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
 
     #[cfg(feature = "rpi")]
     let _gpio_controller = if let Some(gpio_cfg) = config.gpio.as_ref() {
-        Some(GpioController::new(gpio_cfg, command_sender.clone())?)
+        Some(GpioController::new(gpio_cfg, &command_sender)?)
     } else {
         None
     };
@@ -137,15 +137,16 @@ fn init_tracing() {
 
 fn play_startup_sound(startup_sound: &Path, default_volume: f32) {
     let startup_sound = startup_sound.to_path_buf();
-    let handle = thread::spawn(
-        move || match play_blocking(&startup_sound, default_volume) {
-            Ok(()) => info!("Played startup sound from {}", startup_sound.display()),
+    let handle = thread::spawn(move || {
+        info!("Playing startup sound from {}", startup_sound.display());
+        match play_blocking(&startup_sound, default_volume) {
+            Ok(()) => {}
             Err(err) => error!(
                 "Failed to play startup sound {}: {err}",
                 startup_sound.display()
             ),
-        },
-    );
+        }
+    });
 
     let _ = handle;
 }

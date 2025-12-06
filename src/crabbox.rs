@@ -97,15 +97,15 @@ impl Queue {
             current: state.position,
         };
 
-        if let Some(idx) = queue.current {
-            if idx >= queue.tracks.len() {
-                warn!(
-                    idx,
-                    len = queue.tracks.len(),
-                    "Restored queue position out of bounds"
-                );
-                queue.current = None;
-            }
+        if let Some(idx) = queue.current
+            && idx >= queue.tracks.len()
+        {
+            warn!(
+                idx,
+                len = queue.tracks.len(),
+                "Restored queue position out of bounds"
+            );
+            queue.current = None;
         }
 
         queue
@@ -150,7 +150,7 @@ impl Queue {
     fn log(&self) {
         info!("new queue: {} tracks", self.tracks.len());
         for track in &self.tracks {
-            debug!("{track:?}")
+            debug!("{track:?}");
         }
     }
 }
@@ -166,6 +166,7 @@ pub struct Crabbox {
     state_file: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, Copy)]
 enum QueueOrder {
     Ordered,
     Shuffled,
@@ -254,38 +255,7 @@ impl Crabbox {
                 self.play_queue_track(track, player);
             }
             Command::PlayPause { filter } => {
-                let filter = filter.as_deref();
-                let queue_rebuilt = if let Some(filter) = filter {
-                    self.rebuild_queue(Some(filter), QueueOrder::Ordered);
-                    true
-                } else {
-                    false
-                };
-
-                if queue_rebuilt {
-                    player.stop();
-                }
-
-                let track = self.queue.current_track();
-
-                let toggle_result = if queue_rebuilt {
-                    match play_track(track, player, true) {
-                        Some(track) => ToggleResult::Started(track),
-                        None => ToggleResult::Stopped,
-                    }
-                } else {
-                    toggle_play_pause(track, player, true)
-                };
-
-                match toggle_result {
-                    ToggleResult::Started(track) => {
-                        self.status.current = Some(track.clone());
-                    }
-                    ToggleResult::Stopped => self.status.current = None,
-                    ToggleResult::Toggled => {}
-                }
-                self.save_state();
-                debug!(?filter, "Command received: PlayPause");
+                self.on_play_pause(player, filter.as_ref());
             }
             Command::Shuffle { filter } => {
                 let filter = filter.as_deref();
@@ -334,10 +304,10 @@ impl Crabbox {
                 player.stop();
                 self.status.current = None;
                 self.save_state();
-                if let Some(sound) = self.shutdown_sound.as_ref() {
-                    if let Err(err) = play_blocking(sound, self.default_volume) {
-                        warn!("Failed to play shutdown sound {}: {err}", sound.display());
-                    }
+                if let Some(sound) = self.shutdown_sound.as_ref()
+                    && let Err(err) = play_blocking(sound, self.default_volume)
+                {
+                    warn!("Failed to play shutdown sound {}: {err}", sound.display());
                 }
                 if let Err(err) = shutdown_now() {
                     warn!("Failed to trigger shutdown: {err}");
@@ -354,6 +324,40 @@ impl Crabbox {
                 }
             }
         }
+    }
+
+    fn on_play_pause(&mut self, player: &mut Player, filter: Option<&String>) {
+        let queue_rebuilt = if let Some(filter) = filter {
+            self.rebuild_queue(Some(filter), QueueOrder::Ordered);
+            true
+        } else {
+            false
+        };
+
+        if queue_rebuilt {
+            player.stop();
+        }
+
+        let track = self.queue.current_track();
+
+        let toggle_result = if queue_rebuilt {
+            match play_track(track, player, true) {
+                Some(track) => ToggleResult::Started(track),
+                None => ToggleResult::Stopped,
+            }
+        } else {
+            toggle_play_pause(track, player, true)
+        };
+
+        match toggle_result {
+            ToggleResult::Started(track) => {
+                self.status.current = Some(track.clone());
+            }
+            ToggleResult::Stopped => self.status.current = None,
+            ToggleResult::Toggled => {}
+        }
+        self.save_state();
+        debug!(?filter, "Command received: PlayPause");
     }
 
     fn play_queue_track(&mut self, track: Option<PathBuf>, player: &mut Player) {

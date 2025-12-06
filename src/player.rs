@@ -34,13 +34,13 @@ impl Player {
         }
     }
 
-    fn new_stream(&mut self) -> Result<OutputStream, String> {
+    fn new_stream() -> Result<OutputStream, String> {
         OutputStreamBuilder::open_default_stream()
             .map_err(|err| format!("Failed to open default audio output: {err}"))
     }
 
     pub fn play(&mut self, track: &Path, notify: bool) -> Result<(), String> {
-        let stream = self.new_stream()?;
+        let stream = Self::new_stream()?;
 
         let file = File::open(track)
             .map_err(|err| format!("Failed to open file {}: {err}", track.display()))?;
@@ -74,8 +74,7 @@ impl Player {
     pub fn is_paused(&self) -> bool {
         self.sink
             .as_ref()
-            .map(|s| Sink::is_paused(s.as_ref()))
-            .unwrap_or(false)
+            .is_some_and(|s| Sink::is_paused(s.as_ref()))
     }
 
     pub fn pause(&mut self) {
@@ -116,7 +115,7 @@ impl Player {
     pub fn watch_for_track_end(&mut self) {
         self.cancel_track_end_task();
 
-        let Some(sink) = self.sink.as_ref().cloned() else {
+        let Some(sink) = self.sink.clone() else {
             return;
         };
 
@@ -181,6 +180,13 @@ pub enum ToggleResult {
     Started(PathBuf),
     Toggled,
     Stopped,
+}
+
+impl Drop for Player {
+    fn drop(&mut self) {
+        // Ensure playback is stopped cleanly before the stream is dropped.
+        self.stop();
+    }
 }
 
 pub fn play_blocking(track: &Path, volume: f32) -> Result<(), String> {
