@@ -14,4 +14,10 @@ impl State {
         fs::write(path, data)?;
         Ok(())
     }
+
+    pub fn load(path: &PathBuf) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let data = fs::read_to_string(path)?;
+        let state = serde_json::from_str(&data)?;
+        Ok(state)
+    }
 }

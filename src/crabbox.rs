@@ -91,6 +91,26 @@ impl Queue {
         Self { tracks, current }
     }
 
+    fn from_state(state: State) -> Self {
+        let mut queue = Self {
+            tracks: state.queue,
+            current: state.position,
+        };
+
+        if let Some(idx) = queue.current {
+            if idx >= queue.tracks.len() {
+                warn!(
+                    idx,
+                    len = queue.tracks.len(),
+                    "Restored queue position out of bounds"
+                );
+                queue.current = None;
+            }
+        }
+
+        queue
+    }
+
     fn current_track(&self) -> Option<PathBuf> {
         self.current.and_then(|idx| self.tracks.get(idx)).cloned()
     }
@@ -154,13 +174,30 @@ enum QueueOrder {
 impl Crabbox {
     pub fn new(config: &Config) -> Arc<Mutex<Self>> {
         let library = Library::new(&config.music);
-        let queue = Queue::empty();
+        let state_file = config.state_file.clone();
+        let queue = match state_file.as_ref().filter(|path| path.exists()) {
+            Some(path) => match State::load(path) {
+                Ok(state) => {
+                    let queue = Queue::from_state(state);
+                    info!(?path, "Restored playback state from file");
+                    queue.log();
+                    queue
+                }
+                Err(err) => {
+                    warn!(?path, "Failed to load playback state: {err}");
+                    Queue::empty()
+                }
+            },
+            None => Queue::empty(),
+        };
         let tags = config.tags.clone();
         let (tx, rx) = mpsc::channel(16);
-        let status = PlaybackStatus::default();
+        let status = PlaybackStatus {
+            current: queue.current_track(),
+            ..PlaybackStatus::default()
+        };
         let shutdown_sound = config.server.shutdown_sound.clone();
         let default_volume = config.default_volume;
-        let state_file = config.state_file.clone();
 
         let crabbox = Arc::new(Mutex::new(Self {
             library,
