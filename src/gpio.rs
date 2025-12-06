@@ -9,7 +9,9 @@ use std::{
 use rppal::gpio::{Gpio, InputPin, Trigger};
 use tracing::{debug, error, info};
 
-use crate::{commands::Command, config::GpioConfig, crabbox::Crabbox};
+use tokio::sync::mpsc;
+
+use crate::{commands::Command, config::GpioConfig};
 
 pub struct Button {
     _pin: InputPin,
@@ -74,7 +76,7 @@ pub struct GpioController {
 impl GpioController {
     pub fn new(
         config: &GpioConfig,
-        crabbox: Arc<Mutex<Crabbox>>,
+        command_tx: mpsc::Sender<Command>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let pins_configured = config.play.is_some()
             || config.next.is_some()
@@ -105,7 +107,11 @@ impl GpioController {
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&crabbox, Command::PlayPause { filter: None }, "PlayPause"),
+                    make_sender(
+                        &command_tx,
+                        Command::PlayPause { filter: None },
+                        "PlayPause",
+                    ),
                 )
             })
             .transpose()?;
@@ -117,7 +123,7 @@ impl GpioController {
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&crabbox, Command::Next, "Next"),
+                    make_sender(&command_tx, Command::Next, "Next"),
                 )
             })
             .transpose()?;
@@ -129,7 +135,7 @@ impl GpioController {
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&crabbox, Command::Prev, "Prev"),
+                    make_sender(&command_tx, Command::Prev, "Prev"),
                 )
             })
             .transpose()?;
@@ -141,7 +147,7 @@ impl GpioController {
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&crabbox, Command::VolumeUp, "VolumeUp"),
+                    make_sender(&command_tx, Command::VolumeUp, "VolumeUp"),
                 )
             })
             .transpose()?;
@@ -153,7 +159,7 @@ impl GpioController {
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(&crabbox, Command::VolumeDown, "VolumeDown"),
+                    make_sender(&command_tx, Command::VolumeDown, "VolumeDown"),
                 )
             })
             .transpose()?;
@@ -167,7 +173,7 @@ impl GpioController {
                     debounce_duration,
                     Duration::from_secs(5),
                     Arc::new(make_sender(
-                        &crabbox,
+                        &command_tx,
                         Command::Shutdown,
                         "Shutdown (long press)",
                     )),
@@ -253,15 +259,14 @@ impl Timer {
 }
 
 fn make_sender(
-    crabbox: &Arc<Mutex<Crabbox>>,
+    command_tx: &mpsc::Sender<Command>,
     cmd: Command,
     label: &'static str,
 ) -> impl Fn() + Send + Sync + 'static {
-    let crabbox = Arc::clone(crabbox);
+    let sender = command_tx.clone();
     move || {
         debug!("{label}");
-        let sender = crabbox.lock().ok().map(|c| c.sender());
-        if let Some(err) = sender.and_then(|s| s.blocking_send(cmd.clone()).err()) {
+        if let Err(err) = sender.blocking_send(cmd.clone()) {
             error!("Failed to send {label} command from GPIO interrupt: {err}");
         }
     }

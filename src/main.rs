@@ -87,6 +87,7 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     }
 
     let crabbox = Crabbox::new(&config);
+    let command_sender = crabbox.lock().expect("crabbox lock poisoned").sender();
 
     if let Some(pipe_path) = config
         .server
@@ -96,9 +97,9 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
     {
         info!("Starting control pipe at {}", pipe_path.display());
         let path = pipe_path.to_owned();
-        let crabbox_clone = Arc::clone(&crabbox);
+        let sender = command_sender.clone();
         tokio::spawn(async move {
-            if let Err(err) = serve_control_pipe(path, crabbox_clone).await {
+            if let Err(err) = serve_control_pipe(path, sender).await {
                 error!("Control pipe failed: {err}");
             }
         });
@@ -106,13 +107,12 @@ async fn run_server(args: &ServerArgs) -> AnyResult<()> {
 
     #[cfg(feature = "rpi")]
     let _gpio_controller = if let Some(gpio_cfg) = config.gpio.as_ref() {
-        Some(GpioController::new(gpio_cfg, Arc::clone(&crabbox))?)
+        Some(GpioController::new(gpio_cfg, command_sender.clone())?)
     } else {
         None
     };
     #[cfg(feature = "rpi")]
     let _rfid_reader = if let Some(rfid_cfg) = config.rfid.as_ref() {
-        let command_sender = crabbox.lock().expect("crabbox lock poisoned").sender();
         Some(Reader::new(rfid_cfg, command_sender)?)
     } else {
         None
