@@ -18,6 +18,7 @@ mod crabbox;
 mod glob;
 mod pipe;
 mod player;
+mod state;
 mod tag;
 mod web;
 

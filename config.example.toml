@@ -11,6 +11,8 @@ dir = "/another/library"
 # Global playback settings.
 # Optional; defaults to 1.0 (100%).
 default_volume = 1.0
+# Optional; when set, playback state (queue and position) is stored here.
+state_file = "/var/lib/crabbox/state.json"
 
 # Server configuration.
 [server]

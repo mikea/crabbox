@@ -15,6 +15,7 @@ use crate::{
     config::{Config, MusicDirectory},
     glob::Glob,
     player::{Player, ToggleResult, play_blocking, play_track, toggle_play_pause},
+    state::State,
     tag::TagId,
 };
 
@@ -142,6 +143,7 @@ pub struct Crabbox {
     status: PlaybackStatus,
     shutdown_sound: Option<PathBuf>,
     default_volume: f32,
+    state_file: Option<PathBuf>,
 }
 
 enum QueueOrder {
@@ -158,6 +160,7 @@ impl Crabbox {
         let status = PlaybackStatus::default();
         let shutdown_sound = config.server.shutdown_sound.clone();
         let default_volume = config.default_volume;
+        let state_file = config.state_file.clone();
 
         let crabbox = Arc::new(Mutex::new(Self {
             library,
@@ -167,6 +170,7 @@ impl Crabbox {
             status,
             shutdown_sound,
             default_volume,
+            state_file,
         }));
 
         thread::spawn({
@@ -243,6 +247,7 @@ impl Crabbox {
                     ToggleResult::Stopped => self.status.current = None,
                     ToggleResult::Toggled => {}
                 }
+                self.save_state();
                 debug!(?filter, "Command received: PlayPause");
             }
             Command::Shuffle { filter } => {
@@ -258,6 +263,7 @@ impl Crabbox {
             Command::Stop => {
                 player.stop();
                 self.status.current = None;
+                self.save_state();
                 debug!("Command received: Stop");
             }
             Command::Next => {
@@ -290,6 +296,7 @@ impl Crabbox {
                 debug!("Command received: Shutdown");
                 player.stop();
                 self.status.current = None;
+                self.save_state();
                 if let Some(sound) = self.shutdown_sound.as_ref() {
                     if let Err(err) = play_blocking(sound, self.default_volume) {
                         warn!("Failed to play shutdown sound {}: {err}", sound.display());
@@ -319,6 +326,7 @@ impl Crabbox {
             }
             None => self.status.current = None,
         }
+        self.save_state();
     }
 
     fn rebuild_queue(&mut self, filter: Option<&str>, order: QueueOrder) {
@@ -338,6 +346,22 @@ impl Crabbox {
         };
         self.queue.log();
         self.status.current = None;
+        self.save_state();
+    }
+
+    fn save_state(&self) {
+        let Some(path) = self.state_file.as_ref() else {
+            return;
+        };
+
+        let state = State {
+            queue: self.queue.tracks.clone(),
+            position: self.queue.current,
+        };
+
+        if let Err(err) = state.save(path) {
+            warn!(?path, "Failed to save playback state: {err}");
+        }
     }
 }
 

@@ -7,6 +7,7 @@ use std::{
 use crate::{commands::Command, tag::TagId};
 
 use serde::Deserialize;
+use tracing::warn;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -17,6 +18,8 @@ pub struct Config {
     pub default_volume: f32,
     #[serde(default)]
     pub tags: HashMap<TagId, Command>,
+    #[serde(default)]
+    pub state_file: Option<PathBuf>,
     #[cfg(feature = "rpi")]
     pub gpio: Option<GpioConfig>,
     #[cfg(feature = "rpi")]
@@ -109,6 +112,10 @@ impl Config {
 
         #[cfg(feature = "rpi")]
         let _ = (&config.gpio, &config.rfid);
+
+        if config.state_file.is_none() {
+            warn!("State file not configured; state will not persist between runs");
+        }
 
         Ok(config)
     }
