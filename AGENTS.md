@@ -1,0 +1,2 @@
+- To verify change run `cargo check`, `cargo test`, `cargo clippy -- -D warnings`.
+- Run `cargo fmt` before submitting code.

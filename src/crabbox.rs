@@ -313,6 +313,7 @@ impl Crabbox {
                     warn!("Failed to trigger shutdown: {err}");
                 }
             }
+            #[cfg(feature = "rpi")]
             Command::Tag { id } => {
                 self.status.last_tag = Some(id);
                 match self.tags.get(&id).cloned() {

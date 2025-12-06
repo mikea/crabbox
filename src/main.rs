@@ -39,6 +39,44 @@ use web::serve_web;
 
 type AnyResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+struct BuildInfo {
+    version: &'static str,
+    profile: &'static str,
+    target: &'static str,
+    commit: &'static str,
+    dirty: &'static str,
+    rustc: &'static str,
+    built_at: &'static str,
+}
+
+const BUILD_INFO: BuildInfo = BuildInfo {
+    version: env!("CARGO_PKG_VERSION"),
+    profile: match (option_env!("BUILD_PROFILE"), option_env!("PROFILE")) {
+        (Some(value), _) | (None, Some(value)) => value,
+        (None, None) => "unknown",
+    },
+    target: match (option_env!("BUILD_TARGET"), option_env!("TARGET")) {
+        (Some(value), _) | (None, Some(value)) => value,
+        (None, None) => "unknown",
+    },
+    commit: match option_env!("GIT_COMMIT") {
+        Some(value) => value,
+        None => "unknown",
+    },
+    dirty: match option_env!("GIT_DIRTY") {
+        Some(value) => value,
+        None => "unknown",
+    },
+    rustc: match option_env!("RUSTC_VERSION") {
+        Some(value) => value,
+        None => "unknown",
+    },
+    built_at: match option_env!("BUILD_TIMESTAMP") {
+        Some(value) => value,
+        None => "unknown",
+    },
+};
+
 #[derive(Parser)]
 #[command(version, about = "Crabbox command line interface")]
 struct Cli {
@@ -60,6 +98,7 @@ struct ServerArgs {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ExitCode {
     init_tracing();
+    log_build_info();
 
     let cli = Cli::parse();
 
@@ -133,6 +172,19 @@ fn init_tracing() {
 
     tracing::subscriber::set_global_default(subscriber)
         .expect("failed to set global tracing subscriber");
+}
+
+fn log_build_info() {
+    info!(
+        version = BUILD_INFO.version,
+        profile = BUILD_INFO.profile,
+        target = BUILD_INFO.target,
+        commit = BUILD_INFO.commit,
+        dirty = BUILD_INFO.dirty,
+        rustc = BUILD_INFO.rustc,
+        built_at = BUILD_INFO.built_at,
+        "Crabbox build metadata",
+    );
 }
 
 fn play_startup_sound(startup_sound: &Path, default_volume: f32) {

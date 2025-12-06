@@ -91,7 +91,7 @@ impl Config {
         }
 
         if let Some(sound) = &config.server.startup_sound
-            && sound.is_file()
+            && !sound.is_file()
         {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,

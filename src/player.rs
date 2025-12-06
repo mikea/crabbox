@@ -64,7 +64,9 @@ impl Player {
         if let Some(sink) = self.sink.take() {
             sink.stop();
         }
-        self.stream = None;
+        if let Some(_stream) = self.stream.take() {
+            // todo stop playback so that it is not logged?
+        }
     }
 
     pub fn has_sink(&self) -> bool {

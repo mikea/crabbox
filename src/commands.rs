@@ -16,6 +16,7 @@ pub enum Command {
     VolumeUp,
     VolumeDown,
     Shutdown,
+    #[cfg(feature = "rpi")]
     Tag { id: TagId },
 }
 
