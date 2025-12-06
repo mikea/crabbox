@@ -114,7 +114,7 @@ impl Config {
         let _ = (&config.gpio, &config.rfid);
 
         if config.state_file.is_none() {
-            warn!("State file not configured; state will not persist between runs");
+            warn!("state_file not configured; state will not persist between runs");
         }
 
         Ok(config)
