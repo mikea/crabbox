@@ -12,6 +12,7 @@ pub enum Command {
     Stop,
     Next,
     Prev,
+    TrackDone,
     VolumeUp,
     VolumeDown,
     Shutdown,

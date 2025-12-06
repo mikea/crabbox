@@ -210,9 +210,7 @@ impl Crabbox {
 
                 let track = self.queue.current_track();
 
-                if let Some(track) = play_track(track, player) {
-                    self.status.current = Some(track);
-                }
+                self.play_queue_track(track, player);
             }
             Command::PlayPause { filter } => {
                 let filter = filter.as_deref();
@@ -230,16 +228,18 @@ impl Crabbox {
                 let track = self.queue.current_track();
 
                 let toggle_result = if queue_rebuilt {
-                    match play_track(track, player) {
+                    match play_track(track, player, true) {
                         Some(track) => ToggleResult::Started(track),
                         None => ToggleResult::Stopped,
                     }
                 } else {
-                    toggle_play_pause(track, player)
+                    toggle_play_pause(track, player, true)
                 };
 
                 match toggle_result {
-                    ToggleResult::Started(track) => self.status.current = Some(track),
+                    ToggleResult::Started(track) => {
+                        self.status.current = Some(track.clone());
+                    }
                     ToggleResult::Stopped => self.status.current = None,
                     ToggleResult::Toggled => {}
                 }
@@ -252,10 +252,8 @@ impl Crabbox {
 
                 let track = self.queue.current_track();
 
-                if let Some(track) = play_track(track, player) {
-                    self.status.current = Some(track);
-                    debug!(?filter, "Command received: Shuffle");
-                }
+                self.play_queue_track(track, player);
+                debug!(?filter, "Command received: Shuffle");
             }
             Command::Stop => {
                 player.stop();
@@ -265,18 +263,20 @@ impl Crabbox {
             Command::Next => {
                 let track = self.queue.next_track();
 
-                if let Some(track) = play_track(track, player) {
-                    self.status.current = Some(track);
-                    debug!("Command received: Next");
-                }
+                self.play_queue_track(track, player);
+                debug!("Command received: Next");
             }
             Command::Prev => {
                 let track = self.queue.prev_track();
 
-                if let Some(track) = play_track(track, player) {
-                    self.status.current = Some(track);
-                    debug!("Command received: Prev");
-                }
+                self.play_queue_track(track, player);
+                debug!("Command received: Prev");
+            }
+            Command::TrackDone => {
+                let track = self.queue.next_track();
+
+                self.play_queue_track(track, player);
+                debug!("Command received: TrackDone");
             }
             Command::VolumeUp => {
                 player.volume_up();
@@ -312,6 +312,15 @@ impl Crabbox {
         }
     }
 
+    fn play_queue_track(&mut self, track: Option<PathBuf>, player: &mut Player) {
+        match play_track(track, player, true) {
+            Some(track) => {
+                self.status.current = Some(track.clone());
+            }
+            None => self.status.current = None,
+        }
+    }
+
     fn rebuild_queue(&mut self, filter: Option<&str>, order: QueueOrder) {
         let tracks = self.library.list_tracks(filter.map(str::to_string));
 
@@ -337,7 +346,11 @@ async fn process_commands(
     crabbox: Arc<Mutex<Crabbox>>,
     default_volume: f32,
 ) {
-    let mut player = Player::new(default_volume);
+    let sender = {
+        let crabbox = crabbox.lock().expect("failed to lock crabbox");
+        crabbox.command_tx.clone()
+    };
+    let mut player = Player::new(default_volume, sender);
 
     while let Some(cmd) = rx.recv().await {
         if let Ok(mut crabbox) = crabbox.lock() {
