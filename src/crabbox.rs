@@ -52,17 +52,17 @@ impl Library {
     }
 
     pub fn list_tracks(&self, filter: Option<String>) -> Vec<PathBuf> {
-        let tracks = collect_music_files(&self.directories);
+        let mut tracks = collect_music_files(&self.directories);
 
         let Some(filter) = filter else {
             return tracks;
         };
 
         match Glob::new(&filter) {
-            Ok(glob) => tracks
-                .into_iter()
-                .filter(|path| glob.is_match_path(path))
-                .collect(),
+            Ok(glob) => {
+                tracks.retain(|path| glob.is_match_path(path));
+                tracks
+            }
             Err(err) => {
                 warn!(?filter, "Invalid glob: {err}");
                 Vec::new()
@@ -542,6 +542,7 @@ fn collect_music_files(directories: &[PathBuf]) -> Vec<PathBuf> {
         }
     }
 
+    files.sort();
     files
 }
 
@@ -584,6 +585,31 @@ mod tests {
             config_path,
             config_backup_dir: backup_dir,
         }
+    }
+
+    #[test]
+    fn list_tracks_returns_sorted_paths() {
+        let tmp = tempdir().expect("tempdir");
+        let dir_a = tmp.path().join("a_dir");
+        let dir_b = tmp.path().join("b_dir");
+        fs::create_dir_all(&dir_a).expect("create dir a");
+        fs::create_dir_all(&dir_b).expect("create dir b");
+
+        let path_a = dir_a.join("track.mp3");
+        let path_b = dir_b.join("track.mp3");
+        fs::write(&path_b, "audio").expect("write track_b");
+        fs::write(&path_a, "audio").expect("write track_a");
+
+        let library = Library {
+            directories: vec![dir_b, dir_a],
+        };
+
+        let tracks = library.list_tracks(None);
+
+        let mut expected = vec![path_a, path_b];
+        expected.sort();
+
+        assert_eq!(tracks, expected);
     }
 
     #[test]
