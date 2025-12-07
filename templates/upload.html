@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Upload | Crabbox</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 24px; background: #f4f4f7; color: #222; }
+      h1 { margin-top: 0; }
+      form { margin: 0; }
+      .section { background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; max-width: 720px; }
+      button { padding: 10px 14px; border: none; background: #0f62fe; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
+      button:hover { background: #0b4cc0; }
+      .muted { color: #666; }
+      .back { text-decoration: none; color: #0f62fe; }
+      .field { margin: 12px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Upload music</h1>
+    <div class="section">
+      <form method="post" action="/do_upload" enctype="multipart/form-data">
+        <div class="field">
+          {% if destinations | length == 0 %}
+            <p class="muted">No music directories configured.</p>
+          {% elif destinations | length == 1 %}
+            <p>Uploading to <strong>{{ destinations[0] }}</strong></p>
+            <input type="hidden" name="target_dir" value="{{ destinations[0] }}" />
+          {% else %}
+            <label for="target_dir">Select destination</label><br />
+            <select id="target_dir" name="target_dir">
+              {% for destination in destinations %}
+                <option value="{{ destination }}">{{ destination }}</option>
+              {% endfor %}
+            </select>
+          {% endif %}
+        </div>
+        <div class="field">
+          <label for="files">Choose files or entire folders</label><br />
+          <input type="file" id="files" name="files" multiple webkitdirectory directory />
+        </div>
+        <p class="muted">Supports uploading individual tracks or selecting a whole directory of music.</p>
+        <button type="submit">Upload</button>
+      </form>
+    </div>
+
+    <div class="section">
+      <h2>Recently uploaded</h2>
+      {% if last_uploaded | length == 0 %}
+        <p class="muted">No recent uploads.</p>
+      {% else %}
+        <ul>
+          {% for path in last_uploaded %}
+            <li>{{ path }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    <p><a class="back" href="/">&larr; Back to player</a></p>
+  </body>
+</html>

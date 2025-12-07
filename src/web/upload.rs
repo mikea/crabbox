@@ -1,107 +1,43 @@
-use std::{
-    fmt::Write as _,
-    path::{Component, Path, PathBuf},
-};
+use std::path::{Component, Path, PathBuf};
 
 use axum::{
     extract::{Multipart, State},
     http::StatusCode,
     response::{Html, Redirect},
 };
+use serde::Serialize;
 use tokio::{fs, io::AsyncWriteExt};
 
-use super::{AppState, escape_html};
+use super::AppState;
 
 pub async fn upload_form(State(state): State<AppState>) -> Html<String> {
-    let directories = state
+    let destinations = state
         .crabbox
         .lock()
         .map(|crabbox| crabbox.music_directories())
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .map(|dir| dir.display().to_string())
+        .collect();
 
     let last_uploaded = state
         .last_uploaded
         .lock()
-        .map(|paths| paths.clone())
+        .map(|paths| {
+            paths
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
 
-    let destination_html = match directories.len() {
-        0 => "<p class=\"muted\">No music directories configured.</p>".to_string(),
-        1 => {
-            let dir = directories.first().expect("directory exists");
-            let escaped = escape_html(&dir.display().to_string());
-            format!(
-                "<p>Uploading to <strong>{escaped}</strong></p><input type=\"hidden\" name=\"target_dir\" value=\"{escaped}\" />",
-            )
-        }
-        _ => {
-            let mut options = String::new();
-            for dir in &directories {
-                let escaped = escape_html(&dir.display().to_string());
-                let _ = write!(options, "<option value=\"{escaped}\">{escaped}</option>");
-            }
-
-            format!(
-                "<label for=\"target_dir\">Select destination</label><br /><select id=\"target_dir\" name=\"target_dir\">{options}</select>",
-            )
-        }
-    };
-
-    let uploads_html = if last_uploaded.is_empty() {
-        "<p class=\"muted\">No recent uploads.</p>".to_string()
-    } else {
-        let mut uploads = String::from("<ul>");
-        for path in &last_uploaded {
-            let escaped = escape_html(&path.display().to_string());
-            let _ = write!(uploads, "<li>{escaped}</li>");
-        }
-        uploads.push_str("</ul>");
-        uploads
-    };
-
-    let page = format!(
-        r#"<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Upload | Crabbox</title>
-    <style>
-      body {{ font-family: Arial, sans-serif; padding: 24px; background: #f4f4f7; color: #222; }}
-      h1 {{ margin-top: 0; }}
-      form {{ margin: 0; }}
-      .section {{ background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; max-width: 720px; }}
-      button {{ padding: 10px 14px; border: none; background: #0f62fe; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }}
-      button:hover {{ background: #0b4cc0; }}
-      .muted {{ color: #666; }}
-      .back {{ text-decoration: none; color: #0f62fe; }}
-      .field {{ margin: 12px 0; }}
-    </style>
-  </head>
-  <body>
-    <h1>Upload music</h1>
-    <div class="section">
-      <form method="post" action="/do_upload" enctype="multipart/form-data">
-        <div class="field">{destination_html}</div>
-        <div class="field">
-          <label for="files">Choose files or entire folders</label><br />
-          <input type="file" id="files" name="files" multiple webkitdirectory directory />
-        </div>
-        <p class="muted">Supports uploading individual tracks or selecting a whole directory of music.</p>
-        <button type="submit">Upload</button>
-      </form>
-    </div>
-
-    <div class="section">
-      <h2>Recently uploaded</h2>
-      {uploads_html}
-    </div>
-
-    <p><a class="back" href="/">&larr; Back to player</a></p>
-  </body>
-</html>"#
-    );
-
-    Html(page)
+    state.render(
+        "upload.html",
+        UploadTemplateContext {
+            destinations,
+            last_uploaded,
+        },
+    )
 }
 
 pub async fn upload_files(
@@ -182,6 +118,12 @@ pub async fn upload_files(
     }
 
     Ok(Redirect::to("/upload"))
+}
+
+#[derive(Serialize)]
+struct UploadTemplateContext {
+    destinations: Vec<String>,
+    last_uploaded: Vec<String>,
 }
 
 fn sanitize_relative_path(filename: &str) -> Option<PathBuf> {

@@ -1,5 +1,4 @@
 use std::{
-    fmt::Write as _,
     net::SocketAddr,
     path::PathBuf,
     str::FromStr,
@@ -12,7 +11,8 @@ use axum::{
     response::{Html, Redirect},
     routing::{get, post},
 };
-use serde::Deserialize;
+use minijinja::Environment;
+use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tracing::warn;
 
@@ -25,9 +25,12 @@ use edit_tag::{assign_tag, edit_tag};
 use upload::{upload_files, upload_form};
 
 pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
+    let templates = build_templates()?;
+
     let state = AppState {
         crabbox,
         last_uploaded: Arc::new(Mutex::new(Vec::new())),
+        templates,
     };
 
     let app = Router::new()
@@ -77,141 +80,53 @@ async fn index(State(state): State<AppState>) -> Html<String> {
         ),
     };
 
-    let queue_html = if queue.is_empty() {
-        "<p>Queue is empty</p>".to_string()
-    } else {
-        let mut html = String::from("<ol class=\"queue\">");
-        for (idx, track) in queue.iter().enumerate() {
-            let display = escape_html(&track.display().to_string());
-            if queue_position == Some(idx) {
-                let _ = write!(html, "<li><strong>{display}</strong></li>");
-            } else {
-                let _ = write!(html, "<li>{display}</li>");
-            }
-        }
-        html.push_str("</ol>");
-        html
-    };
+    let queue_items = queue
+        .into_iter()
+        .enumerate()
+        .map(|(idx, track)| QueueItem {
+            name: track.display().to_string(),
+            is_current: queue_position == Some(idx),
+        })
+        .collect();
 
-    let library_html = if library.is_empty() {
-        "<p>No tracks found.</p>".to_string()
-    } else {
-        let mut html = String::from("<ul class=\"library\">");
-        for track in library {
-            let display = escape_html(&track.display().to_string());
-            let _ = write!(html, "<li>{display}</li>");
-        }
-        html.push_str("</ul>");
-        html
-    };
+    let library_items = library
+        .into_iter()
+        .map(|track| track.display().to_string())
+        .collect();
 
-    let current_display = escape_html(&current);
-    let last_tag_html = last_tag.map_or_else(|| {
-        "<p>Last tag: <span class=\"muted\">None</span></p>".to_string()
-    }, |tag| {
-        let tag_text = escape_html(&tag.to_string());
-        let command_text = last_tag_command
-            .map_or_else(
-                || "Unassigned".to_string(),
-                |command| escape_html(&command.to_string()),
-            );
-        format!(
-            "<p>Last tag: <span class=\"muted\">{tag_text}</span> · Command: <span class=\"muted\">{command_text}</span> <a class=\"link-button\" href=\"/edit_tag\">Edit tag</a></p>",
-        )
+    let last_tag = last_tag.map(|tag| LastTagContext {
+        id: tag.to_string(),
+        command: last_tag_command.map(|command| command.to_string()),
     });
 
-    let page = format!(
-        r#"<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Crabbox</title>
-    <style>
-      body {{ font-family: Arial, sans-serif; padding: 24px; background: #f4f4f7; color: #222; }}
-      h1 {{ margin-top: 0; }}
-      .controls {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; max-width: 720px; margin: 16px 0; }}
-      form {{ margin: 0; }}
-      button {{ width: 100%; padding: 10px; border: none; background: #0f62fe; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }}
-      button:hover {{ background: #0b4cc0; }}
-      .secondary button {{ background: #6f6f6f; }}
-      .secondary button:hover {{ background: #525252; }}
-      .danger button {{ background: #da1e28; }}
-      .danger button:hover {{ background: #a2191f; }}
-      button.danger {{ background: #da1e28; }}
-      button.danger:hover {{ background: #a2191f; }}
-      .queue, .library {{ padding-left: 20px; }}
-      .command {{ margin: 16px 0; max-width: 480px; display: flex; gap: 8px; }}
-      .command input {{ flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }}
-      .section {{ background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; }}
-      .muted {{ color: #666; }}
-      .link-button {{ display: inline-block; padding: 10px 14px; background: #0f62fe; color: #fff; border-radius: 6px; text-decoration: none; }}
-      .link-button:hover {{ background: #0b4cc0; }}
-    </style>
-  </head>
-  <body>
-    <h1>Crabbox</h1>
-    <div class="section">
-      <p>Current track: <span class="muted">{current_display}</span></p>
-      {last_tag_html}
-      <div class="controls">
-        <form method="post" action="/play">
-          <button type="submit">Play</button>
-        </form>
-        <form method="post" action="/playpause">
-          <button type="submit">Play / Pause</button>
-        </form>
-        <form method="post" action="/stop" class="secondary">
-          <button type="submit">Stop</button>
-        </form>
-        <form method="post" action="/prev">
-          <button type="submit">Previous</button>
-        </form>
-        <form method="post" action="/next">
-          <button type="submit">Next</button>
-        </form>
-        <form method="post" action="/volume-down" class="secondary">
-          <button type="submit">Volume Down</button>
-        </form>
-        <form method="post" action="/volume-up" class="secondary">
-          <button type="submit">Volume Up</button>
-        </form>
-        <form method="post" action="/shutdown" class="danger">
-          <button type="submit">Shutdown</button>
-        </form>
-      </div>
-    </div>
-
-    <div class="section">
-      <form method="post" action="/command" class="command">
-        <input type="text" name="command" placeholder="Enter command e.g. PLAY chill/*" />
-        <button type="submit">Run</button>
-      </form>
-    </div>
-
-    <div class="section">
-      <a class="link-button" href="/upload">Upload files or folders</a>
-    </div>
-
-    <div class="section">
-      <h2>Current queue</h2>
-      {queue_html}
-    </div>
-
-    <div class="section">
-      <h2>Library</h2>
-      {library_html}
-    </div>
-  </body>
-</html>"#
-    );
-
-    Html(page)
+    state.render(
+        "index.html",
+        IndexContext {
+            current,
+            queue: queue_items,
+            library: library_items,
+            last_tag,
+        },
+    )
 }
 
 #[derive(Clone)]
 pub(super) struct AppState {
     pub(super) crabbox: Arc<Mutex<Crabbox>>,
     pub(super) last_uploaded: Arc<Mutex<Vec<PathBuf>>>,
+    templates: Environment<'static>,
+}
+
+impl AppState {
+    pub(super) fn render<C: Serialize>(&self, name: &str, context: C) -> Html<String> {
+        let rendered = self
+            .templates
+            .get_template(name)
+            .and_then(|template| template.render(context))
+            .unwrap_or_else(|err| format!("Template error: {err}"));
+
+        Html(rendered)
+    }
 }
 
 async fn play(State(state): State<AppState>) -> Redirect {
@@ -275,11 +190,46 @@ pub(super) async fn send_command(state: &AppState, command: Command) {
     }
 }
 
-pub(super) fn escape_html(input: &str) -> String {
-    input
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
+#[derive(Serialize)]
+struct QueueItem {
+    name: String,
+    is_current: bool,
+}
+
+#[derive(Serialize)]
+struct LastTagContext {
+    id: String,
+    command: Option<String>,
+}
+
+#[derive(Serialize)]
+struct IndexContext {
+    current: String,
+    queue: Vec<QueueItem>,
+    library: Vec<String>,
+    last_tag: Option<LastTagContext>,
+}
+
+fn build_templates() -> AnyResult<Environment<'static>> {
+    let mut env = Environment::new();
+    env.set_auto_escape_callback(minijinja::default_auto_escape_callback);
+    env.add_template(
+        "index.html",
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/index.html")),
+    )?;
+    env.add_template(
+        "upload.html",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/upload.html"
+        )),
+    )?;
+    env.add_template(
+        "edit_tag.html",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/edit_tag.html"
+        )),
+    )?;
+    Ok(env)
 }

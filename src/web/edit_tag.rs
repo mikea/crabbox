@@ -4,12 +4,12 @@ use axum::{
     extract::{Form, State},
     response::{Html, Redirect},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::{commands::Command, tag::TagId};
 
-use super::{AppState, escape_html, send_command};
+use super::{AppState, send_command};
 
 #[derive(Deserialize)]
 pub(super) struct AssignTagForm {
@@ -21,66 +21,25 @@ pub(super) struct AssignTagForm {
 pub(super) async fn edit_tag(State(state): State<AppState>) -> Html<String> {
     let snapshot = state.crabbox.lock().ok().map(|c| c.snapshot());
 
-    let Some(snapshot) = snapshot else {
-        return Html("<p>Crabbox unavailable</p>".to_string());
-    };
+    let context = snapshot.map_or(
+        EditTagTemplateContext {
+            available: false,
+            last_tag: None,
+        },
+        |snapshot| {
+            let last_tag = snapshot.last_tag.map(|tag| TagTemplateContext {
+                id: tag.to_string(),
+                command: snapshot.last_tag_command.map(|command| command.to_string()),
+            });
 
-    let content = match snapshot.last_tag {
-        Some(tag) => {
-            let tag_text = escape_html(&tag.to_string());
-            let command_value = snapshot
-                .last_tag_command
-                .map(|command| escape_html(&command.to_string()))
-                .unwrap_or_default();
-
-            format!(
-                r#"<div class=\"section\">
-      <p>Tag ID: <strong>{tag_text}</strong></p>
-      <form method=\"post\" action=\"/assign_tag\" class=\"command\">
-        <input type=\"hidden\" name=\"tag_id\" value=\"{tag_text}\" />
-        <input type=\"text\" name=\"command\" value=\"{command_value}\" placeholder=\"Command e.g. PLAY chill/*\" />
-        <button type=\"submit\" name=\"action\" value=\"save\">Save</button>
-        <button type=\"submit\" name=\"action\" value=\"delete\" class=\"danger\">Delete</button>
-      </form>
-    </div>"#
-            )
-        }
-        None => "<div class=\"section\"><p>No tag has been scanned yet.</p></div>".to_string(),
-    };
-
-    let page = format!(
-        r#"<!doctype html>
-<html>
-  <head>
-    <meta charset=\"utf-8\" />
-    <title>Edit tag · Crabbox</title>
-    <style>
-      body {{ font-family: Arial, sans-serif; padding: 24px; background: #f4f4f7; color: #222; }}
-      h1 {{ margin-top: 0; }}
-      form {{ margin: 0; }}
-      button {{ width: 100%; padding: 10px; border: none; background: #0f62fe; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }}
-      button:hover {{ background: #0b4cc0; }}
-      button.danger {{ background: #da1e28; }}
-      button.danger:hover {{ background: #a2191f; }}
-      .command {{ margin: 16px 0; max-width: 520px; display: grid; grid-template-columns: 1fr 120px 120px; gap: 8px; }}
-      .command input {{ padding: 10px; border: 1px solid #ccc; border-radius: 6px; }}
-      .section {{ background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; max-width: 720px; }}
-      .muted {{ color: #666; }}
-      .link-button {{ display: inline-block; padding: 10px 14px; background: #6f6f6f; color: #fff; border-radius: 6px; text-decoration: none; }}
-      .link-button:hover {{ background: #525252; }}
-    </style>
-  </head>
-  <body>
-    <h1>Edit last tag</h1>
-    {content}
-    <div class=\"section\">
-      <a class=\"link-button\" href=\"/\">Back to controls</a>
-    </div>
-  </body>
-</html>"#
+            EditTagTemplateContext {
+                available: true,
+                last_tag,
+            }
+        },
     );
 
-    Html(page)
+    state.render("edit_tag.html", context)
 }
 
 pub(super) async fn assign_tag(
@@ -111,4 +70,16 @@ pub(super) async fn assign_tag(
     }
 
     Redirect::to("/edit_tag")
+}
+
+#[derive(Serialize)]
+struct TagTemplateContext {
+    id: String,
+    command: Option<String>,
+}
+
+#[derive(Serialize)]
+struct EditTagTemplateContext {
+    available: bool,
+    last_tag: Option<TagTemplateContext>,
 }
