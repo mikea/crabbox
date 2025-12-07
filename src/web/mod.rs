@@ -1,6 +1,7 @@
 use std::{
-    net::SocketAddr,
     fmt::Write as _,
+    net::SocketAddr,
+    path::PathBuf,
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -17,8 +18,15 @@ use tracing::warn;
 
 use crate::{AnyResult, commands::Command, crabbox::Crabbox};
 
+mod upload;
+
+use upload::{upload_files, upload_form};
+
 pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
-    let state = AppState { crabbox };
+    let state = AppState {
+        crabbox,
+        last_uploaded: Arc::new(Mutex::new(Vec::new())),
+    };
 
     let app = Router::new()
         .route("/", get(index))
@@ -31,6 +39,8 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
         .route("/volume-down", post(volume_down))
         .route("/shutdown", post(shutdown))
         .route("/command", post(run_command))
+        .route("/upload", get(upload_form))
+        .route("/do_upload", post(upload_files))
         .with_state(state);
     let listener = TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -115,6 +125,8 @@ async fn index(State(state): State<AppState>) -> Html<String> {
       .command input {{ flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }}
       .section {{ background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; }}
       .muted {{ color: #666; }}
+      .link-button {{ display: inline-block; padding: 10px 14px; background: #0f62fe; color: #fff; border-radius: 6px; text-decoration: none; }}
+      .link-button:hover {{ background: #0b4cc0; }}
     </style>
   </head>
   <body>
@@ -158,6 +170,10 @@ async fn index(State(state): State<AppState>) -> Html<String> {
     </div>
 
     <div class="section">
+      <a class="link-button" href="/upload">Upload files or folders</a>
+    </div>
+
+    <div class="section">
       <h2>Current queue</h2>
       {queue_html}
     </div>
@@ -174,8 +190,9 @@ async fn index(State(state): State<AppState>) -> Html<String> {
 }
 
 #[derive(Clone)]
-struct AppState {
-    crabbox: Arc<Mutex<Crabbox>>,
+pub(super) struct AppState {
+    pub(super) crabbox: Arc<Mutex<Crabbox>>,
+    pub(super) last_uploaded: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 async fn play(State(state): State<AppState>) -> Redirect {
@@ -239,7 +256,7 @@ async fn send_command(state: &AppState, command: Command) {
     }
 }
 
-fn escape_html(input: &str) -> String {
+pub(super) fn escape_html(input: &str) -> String {
     input
         .replace('&', "&amp;")
         .replace('<', "&lt;")
