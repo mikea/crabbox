@@ -6,7 +6,7 @@ use std::{
 use axum::{
     extract::{Multipart, State},
     http::StatusCode,
-    response::{Html, Redirect},
+    response::Html,
 };
 use tokio::{fs, io::AsyncWriteExt};
 
@@ -84,7 +84,7 @@ pub async fn upload_form(State(state): State<AppState>) -> Html<String> {
 pub async fn upload_files(
     State(state): State<AppState>,
     mut multipart: Multipart,
-) -> Result<Redirect, (StatusCode, String)> {
+) -> Result<Html<String>, (StatusCode, String)> {
     let available_directories = state
         .crabbox
         .lock()
@@ -97,7 +97,8 @@ pub async fn upload_files(
         })?;
 
     let mut target_dir_value: Option<String> = None;
-    let mut saved_files = 0usize;
+    let mut target_root: Option<PathBuf> = None;
+    let mut saved_files: Vec<PathBuf> = Vec::new();
 
     while let Some(field) = multipart.next_field().await.map_err(internal_error)? {
         let Some(name) = field.name().map(str::to_owned) else {
@@ -113,11 +114,17 @@ pub async fn upload_files(
             continue;
         }
 
-        let target_root = resolve_target_dir(&available_directories, target_dir_value.as_deref())
-            .ok_or((
-            StatusCode::BAD_REQUEST,
-            "Invalid target directory".to_string(),
-        ))?;
+        let root = if let Some(root) = &target_root {
+            root.clone()
+        } else {
+            let resolved = resolve_target_dir(&available_directories, target_dir_value.as_deref())
+                .ok_or((
+                    StatusCode::BAD_REQUEST,
+                    "Invalid target directory".to_string(),
+                ))?;
+            target_root = Some(resolved.clone());
+            resolved
+        };
 
         let Some(filename) = field.file_name().map(ToString::to_string) else {
             continue;
@@ -127,7 +134,7 @@ pub async fn upload_files(
             continue;
         };
 
-        let destination = target_root.join(relative_path);
+        let destination = root.join(relative_path.clone());
 
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent).await.map_err(internal_error)?;
@@ -142,17 +149,55 @@ pub async fn upload_files(
             file.write_all(&chunk).await.map_err(internal_error)?;
         }
 
-        saved_files += 1;
+        saved_files.push(destination);
     }
 
-    if saved_files == 0 {
+    if saved_files.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             "No files were uploaded".to_string(),
         ));
     }
 
-    Ok(Redirect::to("/upload"))
+    let uploaded_to = target_root.as_ref().map_or_else(
+        || "unknown location".to_string(),
+        |path| path.display().to_string(),
+    );
+
+    let mut list_items = String::new();
+    for file in &saved_files {
+        let escaped = escape_html(&file.display().to_string());
+        let _ = write!(list_items, "<li>{escaped}</li>");
+    }
+
+    let page = format!(
+        r#"<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Upload complete | Crabbox</title>
+    <style>
+      body {{ font-family: Arial, sans-serif; padding: 24px; background: #f4f4f7; color: #222; }}
+      h1 {{ margin-top: 0; }}
+      .section {{ background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; max-width: 720px; }}
+      .muted {{ color: #666; }}
+      .back {{ text-decoration: none; color: #0f62fe; }}
+    </style>
+  </head>
+  <body>
+    <h1>Upload successful</h1>
+    <div class="section">
+      <p class="muted">Saved to {uploaded_to}.</p>
+      <p>Uploaded files:</p>
+      <ul>{list_items}</ul>
+      <p><a class="back" href="/upload">Upload more</a></p>
+      <p><a class="back" href="/">&larr; Back to player</a></p>
+    </div>
+  </body>
+</html>"#
+    );
+
+    Ok(Html(page))
 }
 
 fn sanitize_relative_path(filename: &str) -> Option<PathBuf> {
