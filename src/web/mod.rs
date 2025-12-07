@@ -1,6 +1,7 @@
 use std::{
     fmt::Write as _,
     net::SocketAddr,
+    path::PathBuf,
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -22,7 +23,10 @@ mod upload;
 use upload::{upload_files, upload_form};
 
 pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
-    let state = AppState { crabbox };
+    let state = AppState {
+        crabbox,
+        last_uploaded: Arc::new(Mutex::new(Vec::new())),
+    };
 
     let app = Router::new()
         .route("/", get(index))
@@ -188,6 +192,7 @@ async fn index(State(state): State<AppState>) -> Html<String> {
 #[derive(Clone)]
 pub(super) struct AppState {
     pub(super) crabbox: Arc<Mutex<Crabbox>>,
+    pub(super) last_uploaded: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 async fn play(State(state): State<AppState>) -> Redirect {

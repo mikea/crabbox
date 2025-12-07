@@ -19,6 +19,12 @@ pub async fn upload_form(State(state): State<AppState>) -> Html<String> {
         .map(|crabbox| crabbox.music_directories())
         .unwrap_or_default();
 
+    let last_uploaded = state
+        .last_uploaded
+        .lock()
+        .map(|paths| paths.clone())
+        .unwrap_or_default();
+
     let destination_html = match directories.len() {
         0 => "<p class=\"muted\">No music directories configured.</p>".to_string(),
         1 => {
@@ -39,6 +45,18 @@ pub async fn upload_form(State(state): State<AppState>) -> Html<String> {
                 "<label for=\"target_dir\">Select destination</label><br /><select id=\"target_dir\" name=\"target_dir\">{options}</select>",
             )
         }
+    };
+
+    let uploads_html = if last_uploaded.is_empty() {
+        "<p class=\"muted\">No recent uploads.</p>".to_string()
+    } else {
+        let mut uploads = String::from("<ul>");
+        for path in &last_uploaded {
+            let escaped = escape_html(&path.display().to_string());
+            let _ = write!(uploads, "<li>{escaped}</li>");
+        }
+        uploads.push_str("</ul>");
+        uploads
     };
 
     let page = format!(
@@ -73,6 +91,11 @@ pub async fn upload_form(State(state): State<AppState>) -> Html<String> {
       </form>
     </div>
 
+    <div class="section">
+      <h2>Recently uploaded</h2>
+      {uploads_html}
+    </div>
+
     <p><a class="back" href="/">&larr; Back to player</a></p>
   </body>
 </html>"#
@@ -98,6 +121,7 @@ pub async fn upload_files(
 
     let mut target_dir_value: Option<String> = None;
     let mut saved_files = 0usize;
+    let mut uploaded_paths: Vec<PathBuf> = Vec::new();
 
     while let Some(field) = multipart.next_field().await.map_err(internal_error)? {
         let Some(name) = field.name().map(str::to_owned) else {
@@ -127,7 +151,7 @@ pub async fn upload_files(
             continue;
         };
 
-        let destination = target_root.join(relative_path);
+        let destination = target_root.join(&relative_path);
 
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent).await.map_err(internal_error)?;
@@ -143,6 +167,7 @@ pub async fn upload_files(
         }
 
         saved_files += 1;
+        uploaded_paths.push(relative_path);
     }
 
     if saved_files == 0 {
@@ -150,6 +175,10 @@ pub async fn upload_files(
             StatusCode::BAD_REQUEST,
             "No files were uploaded".to_string(),
         ));
+    }
+
+    if let Ok(mut last_uploaded) = state.last_uploaded.lock() {
+        *last_uploaded = uploaded_paths;
     }
 
     Ok(Redirect::to("/upload"))
