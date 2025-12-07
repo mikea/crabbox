@@ -23,14 +23,19 @@
       .muted { color: #666; }
       .link-button { display: inline-block; padding: 10px 14px; background: #0f62fe; color: #fff; border-radius: 6px; text-decoration: none; }
       .link-button:hover { background: #0b4cc0; }
+      .tags { padding-left: 20px; }
+      .tags li { margin-bottom: 4px; }
     </style>
   </head>
   <body>
+    {% macro tag_assignment(tag) -%}
+      <span class="muted">{{ tag.id }}</span> · Command: <span class="muted">{{ tag.command | default("Unassigned") }}</span> <a class="link-button" href="/edit_tag/{{ tag.id }}">Edit tag</a>
+    {%- endmacro %}
     <h1>Crabbox</h1>
     <div class="section">
       <p>Current track: <span class="muted">{{ current }}</span></p>
       {% if last_tag %}
-        <p>Last tag: <span class="muted">{{ last_tag.id }}</span> · Command: <span class="muted">{{ last_tag.command | default("Unassigned") }}</span> <a class="link-button" href="/edit_tag">Edit tag</a></p>
+        <p>Last tag: {{ tag_assignment(last_tag) }}</p>
       {% else %}
         <p>Last tag: <span class="muted">None</span></p>
       {% endif %}
@@ -87,6 +92,19 @@
             {% endif %}
           {% endfor %}
         </ol>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Tags</h2>
+      {% if tags | length == 0 %}
+        <p>No tag assignments.</p>
+      {% else %}
+        <ul class="tags">
+          {% for tag in tags %}
+            <li>{{ tag_assignment(tag) }}</li>
+          {% endfor %}
+        </ul>
       {% endif %}
     </div>
 

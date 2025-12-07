@@ -11,8 +11,20 @@
       button:hover { background: #0b4cc0; }
       button.danger { background: #da1e28; }
       button.danger:hover { background: #a2191f; }
-      .command { margin: 16px 0; max-width: 520px; display: grid; grid-template-columns: 1fr 120px 120px; gap: 8px; }
-      .command input { padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+      .command { margin: 16px 0; max-width: 620px; display: grid; grid-template-columns: 140px 1fr auto; gap: 16px; align-items: center; }
+      .command input { padding: 12px; border: 1px solid #ccc; border-radius: 6px; }
+      .command select { padding: 10px; border: 1px solid #ccc; border-radius: 6px; width: 140px; }
+      .command #filter-container { display: grid; grid-column: 2; }
+      .command #filter-container input { width: 100%; }
+      .command button[type="submit"][value="save"] { margin-left: 12px; padding: 12px 16px; }
+      .delete-row { display: flex; justify-content: flex-end; max-width: 620px; margin-top: 8px; }
+      .delete-button { background: #f2f2f2; color: #444; border: 1px solid #d6d6d6; padding: 8px 14px; width: auto; min-width: 80px; }
+      .delete-button:hover { background: #e5e5e5; }
+      .matches { max-width: 620px; margin-top: 8px; }
+      .matches h3 { margin: 0 0 4px 0; font-size: 15px; }
+      .matches ul { list-style: none; padding-left: 0; margin: 6px 0 0 0; }
+      .matches li { padding: 6px 8px; border-bottom: 1px solid #eee; font-size: 14px; }
+      .matches li:last-child { border-bottom: none; }
       .section { background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; max-width: 720px; }
       .muted { color: #666; }
       .link-button { display: inline-block; padding: 10px 14px; background: #6f6f6f; color: #fff; border-radius: 6px; text-decoration: none; }
@@ -20,26 +32,114 @@
     </style>
   </head>
   <body>
-    <h1>Edit last tag</h1>
+    <h1>Edit tag {{ tag_id }}</h1>
     {% if not available %}
       <div class="section"><p>Crabbox unavailable</p></div>
+    {% elif error %}
+      <div class="section"><p class="muted">{{ error }}</p></div>
     {% else %}
-      {% if last_tag %}
+      {% if tag %}
         <div class="section">
-          <p>Tag ID: <strong>{{ last_tag.id }}</strong></p>
-          <form method="post" action="/assign_tag" class="command">
-            <input type="hidden" name="tag_id" value="{{ last_tag.id }}" />
-            <input type="text" name="command" value="{{ last_tag.command | default("") }}" placeholder="Command e.g. PLAY chill/*" />
+          <p>Tag ID: <strong>{{ tag.id }}</strong></p>
+          <form method="post" action="/assign_tag" class="command" id="assign-form">
+            <input type="hidden" name="tag_id" value="{{ tag.id }}" />
+            <select name="command" id="command-select">
+              {% for option in tag.command_options %}
+                <option value="{{ option.value }}" data-requires-filter="{{ option.requires_filter }}" {% if option.selected %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            <div id="filter-container">
+              <input type="text" name="filter" value="{{ tag.filter | default("") }}" placeholder="Filter e.g. chill/*" />
+            </div>
             <button type="submit" name="action" value="save">Save</button>
-            <button type="submit" name="action" value="delete" class="danger">Delete</button>
           </form>
+          <div class="matches" id="matches-section" style="display:none;">
+            <h3>Matching files</h3>
+            <div id="matches-status" class="muted"></div>
+            <ul id="match-list"></ul>
+          </div>
+          <div class="delete-row">
+            <form method="post" action="/assign_tag">
+              <input type="hidden" name="tag_id" value="{{ tag.id }}" />
+              <button type="submit" name="action" value="delete" class="delete-button">Delete</button>
+            </form>
+          </div>
         </div>
       {% else %}
-        <div class="section"><p>No tag has been scanned yet.</p></div>
+        <div class="section"><p>No tag data available.</p></div>
       {% endif %}
     {% endif %}
     <div class="section">
       <a class="link-button" href="/">Back to controls</a>
     </div>
+    <script>
+      const commandSelect = document.getElementById("command-select");
+      const filterContainer = document.getElementById("filter-container");
+      const filterInput = filterContainer?.querySelector("input");
+      const matchesSection = document.getElementById("matches-section");
+      const matchesList = document.getElementById("match-list");
+      const matchesStatus = document.getElementById("matches-status");
+      let debounceHandle;
+
+      function updateFilterVisibility() {
+        const option = commandSelect.options[commandSelect.selectedIndex];
+        const requiresFilter = option?.dataset?.requiresFilter === "true";
+        filterContainer.style.display = requiresFilter ? "grid" : "none";
+        matchesSection.style.display = requiresFilter ? "block" : "none";
+        if (requiresFilter) {
+          scheduleFetch();
+        } else {
+          clearMatches();
+        }
+      }
+
+      function clearMatches() {
+        matchesList.innerHTML = "";
+        matchesStatus.textContent = "";
+      }
+
+      async function fetchMatches() {
+        if (!filterInput) {
+          return;
+        }
+        const filter = filterInput.value.trim();
+        const url = new URL("/list_files", window.location.origin);
+        if (filter) {
+          url.searchParams.set("filter", filter);
+        }
+        matchesStatus.textContent = "Loading...";
+        try {
+          const response = await fetch(url.toString());
+          const data = await response.json();
+          renderMatches(data);
+        } catch (err) {
+          matchesStatus.textContent = "Failed to load matches";
+        }
+      }
+
+      function renderMatches(files) {
+        matchesList.innerHTML = "";
+        if (!files || files.length === 0) {
+          matchesStatus.textContent = "No matches";
+          return;
+        }
+        matchesStatus.textContent = `${files.length} match${files.length === 1 ? "" : "es"}`;
+        files.forEach((file) => {
+          const li = document.createElement("li");
+          li.textContent = file;
+          matchesList.appendChild(li);
+        });
+      }
+
+      function scheduleFetch() {
+        clearTimeout(debounceHandle);
+        debounceHandle = setTimeout(fetchMatches, 200);
+      }
+
+      commandSelect?.addEventListener("change", updateFilterVisibility);
+      filterInput?.addEventListener("input", scheduleFetch);
+      updateFilterVisibility();
+      scheduleFetch();
+    </script>
   </body>
 </html>

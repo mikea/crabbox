@@ -35,6 +35,7 @@ pub struct CrabboxSnapshot {
     pub queue: Vec<PathBuf>,
     pub queue_position: Option<usize>,
     pub library: Vec<PathBuf>,
+    pub tags: Vec<(TagId, Command)>,
     pub last_tag: Option<TagId>,
     pub last_tag_command: Option<Command>,
 }
@@ -246,12 +247,19 @@ impl Crabbox {
             .status
             .last_tag
             .and_then(|tag| self.tags.get(&tag).cloned());
+        let mut tags: Vec<_> = self
+            .tags
+            .iter()
+            .map(|(id, command)| (*id, command.clone()))
+            .collect();
+        tags.sort_by(|(left, _), (right, _)| left.to_string().cmp(&right.to_string()));
 
         CrabboxSnapshot {
             current: self.status.current.clone(),
             queue: self.queue.tracks.clone(),
             queue_position: self.queue.current,
             library: self.library.list_tracks(None),
+            tags,
             last_tag: self.status.last_tag,
             last_tag_command,
         }

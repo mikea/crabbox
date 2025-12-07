@@ -95,6 +95,33 @@ pub fn parse_command(input: &str) -> Option<Command> {
     }
 }
 
+impl Command {
+    pub fn has_filter(&self) -> bool {
+        matches!(
+            self,
+            Command::Play { .. } | Command::PlayPause { .. } | Command::Shuffle { .. }
+        )
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Command::Play { .. } => "PLAY",
+            Command::PlayPause { .. } => "PLAYPAUSE",
+            Command::Shuffle { .. } => "SHUFFLE",
+            Command::Stop => "STOP",
+            Command::Next => "NEXT",
+            Command::Prev => "PREV",
+            Command::TrackDone => "TRACKDONE",
+            Command::VolumeUp => "VOLUMEUP",
+            Command::VolumeDown => "VOLUMEDOWN",
+            Command::Shutdown => "SHUTDOWN",
+            Command::AssignTag { .. } => "ASSIGN_TAG",
+            #[cfg(feature = "rpi")]
+            Command::Tag { .. } => "TAG",
+        }
+    }
+}
+
 fn write_name_with_filter(
     f: &mut fmt::Formatter<'_>,
     name: &str,

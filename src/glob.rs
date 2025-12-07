@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 
 pub fn glob_to_regex(pattern: &str) -> Result<Regex, regex::Error> {
     let mut regex_str = String::from("^");
@@ -39,7 +39,7 @@ pub fn glob_to_regex(pattern: &str) -> Result<Regex, regex::Error> {
     flush_literal(&mut literal, &mut regex_str);
     regex_str.push('$');
 
-    Regex::new(&regex_str)
+    RegexBuilder::new(&regex_str).case_insensitive(true).build()
 }
 
 pub struct Glob {
@@ -153,5 +153,13 @@ mod tests {
         assert!(regex.is_match("song"));
         assert!(regex.is_match("song-extended"));
         assert!(!regex.is_match("best song"));
+    }
+
+    #[test]
+    fn matching_is_case_insensitive() {
+        let glob = Glob::new("ROCK/*.MP3").unwrap();
+        assert!(glob.is_match("rock/anthem.mp3"));
+        assert!(glob.is_match("ROCK/ANTHEM.MP3"));
+        assert!(!glob.is_match("jazz/anthem.mp3"));
     }
 }

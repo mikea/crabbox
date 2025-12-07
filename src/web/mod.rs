@@ -7,8 +7,8 @@ use std::{
 
 use axum::{
     Router,
-    extract::{Form, State},
-    response::{Html, Redirect},
+    extract::{Form, Query, State},
+    response::{Html, Json, Redirect},
     routing::{get, post},
 };
 use minijinja::Environment;
@@ -19,9 +19,11 @@ use tracing::warn;
 use crate::{AnyResult, commands::Command, crabbox::Crabbox};
 
 mod edit_tag;
+mod index;
 mod upload;
 
 use edit_tag::{assign_tag, edit_tag};
+use index::index;
 use upload::{upload_files, upload_form};
 
 pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
@@ -44,7 +46,8 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
         .route("/volume-down", post(volume_down))
         .route("/shutdown", post(shutdown))
         .route("/command", post(run_command))
-        .route("/edit_tag", get(edit_tag))
+        .route("/list_files", get(list_files))
+        .route("/edit_tag/{id}", get(edit_tag))
         .route("/assign_tag", post(assign_tag))
         .route("/upload", get(upload_form))
         .route("/do_upload", post(upload_files))
@@ -52,62 +55,6 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
     let listener = TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-#[allow(clippy::too_many_lines)]
-async fn index(State(state): State<AppState>) -> Html<String> {
-    let snapshot = state.crabbox.lock().ok().map(|c| c.snapshot());
-
-    let (current, queue, queue_position, library, last_tag, last_tag_command) = match snapshot {
-        Some(snapshot) => (
-            snapshot.current.map_or_else(
-                || "Nothing playing".to_string(),
-                |p| p.display().to_string(),
-            ),
-            snapshot.queue,
-            snapshot.queue_position,
-            snapshot.library,
-            snapshot.last_tag,
-            snapshot.last_tag_command,
-        ),
-        None => (
-            "Unavailable".to_string(),
-            Vec::new(),
-            None,
-            Vec::new(),
-            None,
-            None,
-        ),
-    };
-
-    let queue_items = queue
-        .into_iter()
-        .enumerate()
-        .map(|(idx, track)| QueueItem {
-            name: track.display().to_string(),
-            is_current: queue_position == Some(idx),
-        })
-        .collect();
-
-    let library_items = library
-        .into_iter()
-        .map(|track| track.display().to_string())
-        .collect();
-
-    let last_tag = last_tag.map(|tag| LastTagContext {
-        id: tag.to_string(),
-        command: last_tag_command.map(|command| command.to_string()),
-    });
-
-    state.render(
-        "index.html",
-        IndexContext {
-            current,
-            queue: queue_items,
-            library: library_items,
-            last_tag,
-        },
-    )
 }
 
 #[derive(Clone)]
@@ -190,24 +137,25 @@ pub(super) async fn send_command(state: &AppState, command: Command) {
     }
 }
 
-#[derive(Serialize)]
-struct QueueItem {
-    name: String,
-    is_current: bool,
+#[derive(Deserialize)]
+struct ListFilesQuery {
+    filter: Option<String>,
 }
 
-#[derive(Serialize)]
-struct LastTagContext {
-    id: String,
-    command: Option<String>,
-}
+async fn list_files(
+    Query(query): Query<ListFilesQuery>,
+    State(state): State<AppState>,
+) -> Json<Vec<String>> {
+    let files = state
+        .crabbox
+        .lock()
+        .map(|c| c.library.list_tracks(query.filter))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|path| path.display().to_string())
+        .collect();
 
-#[derive(Serialize)]
-struct IndexContext {
-    current: String,
-    queue: Vec<QueueItem>,
-    library: Vec<String>,
-    last_tag: Option<LastTagContext>,
+    Json(files)
 }
 
 fn build_templates() -> AnyResult<Environment<'static>> {
