@@ -15,7 +15,7 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0"
-toml_edit = "0.22"
+toml_edit = "0"
 rand = "0"
 walkdir = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "fs"] }
@@ -26,7 +26,7 @@ tracing = "0"
 tracing-subscriber = { version = "0", features = ["fmt"] }
 rppal = { version = "0", optional = true }
 regex = "1"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono = { version = "0", default-features = false, features = ["clock"] }
 
 [dev-dependencies]
 tempfile = "3"
