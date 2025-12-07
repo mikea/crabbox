@@ -242,6 +242,10 @@ impl Crabbox {
         }
     }
 
+    pub fn music_directories(&self) -> Vec<PathBuf> {
+        self.library.directories.clone()
+    }
+
     fn process_command(&mut self, cmd: Command, player: &mut Player) {
         match cmd {
             Command::Play { filter } => {
