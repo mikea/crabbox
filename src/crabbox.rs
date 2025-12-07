@@ -661,4 +661,36 @@ DEADBEEF = "SHUFFLE 80s/*"
         assert!(updated_config.contains("DEADBEEF = \"SHUFFLE 80s/*\""));
         assert!(updated_config.contains("ABCD1234 = \"STOP\""));
     }
+
+    #[test]
+    fn persist_tag_mapping_removes_entry_without_touching_other_tags() {
+        let tmp = tempdir().expect("tempdir");
+        let config_path = tmp.path().join("config.toml");
+        let initial_config = r#"[[music]]
+dir = "/music"
+
+[server]
+web = "0.0.0.0:8080"
+
+[tags]
+# primary tag comment
+ABCD1234 = "PLAY"
+# preserve this entry
+DEADBEEF = "SHUFFLE 80s/*"
+"#;
+
+        fs::write(&config_path, initial_config).expect("write config");
+
+        let crabbox = crabbox_with_config(config_path.clone(), None);
+
+        crabbox
+            .persist_tag_mapping(TagId::from_hex_str("ABCD1234").unwrap(), None)
+            .expect("persist tag");
+
+        let updated_config = fs::read_to_string(config_path).expect("updated config");
+
+        assert!(updated_config.contains("# preserve this entry"));
+        assert!(updated_config.contains("DEADBEEF = \"SHUFFLE 80s/*\""));
+        assert!(!updated_config.contains("ABCD1234"));
+    }
 }
