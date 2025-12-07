@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -8,7 +10,7 @@ impl TagId {
         Self(uid)
     }
 
-    fn from_hex_str(s: &str) -> Result<Self, String> {
+    pub fn from_hex_str(s: &str) -> Result<Self, String> {
         let trimmed = s.trim();
         if trimmed.len() != 8 {
             return Err("RFID tag IDs must be 8 hexadecimal characters".to_string());
@@ -51,6 +53,14 @@ impl<'de> Deserialize<'de> for TagId {
     }
 }
 
+impl FromStr for TagId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        TagId::from_hex_str(s)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,5 +74,11 @@ mod tests {
     #[test]
     fn tag_id_rejects_wrong_length() {
         assert!(TagId::from_hex_str("123").is_err());
+    }
+
+    #[test]
+    fn parses_via_from_str() {
+        let tag: TagId = "0a1b2c3d".parse().expect("should parse");
+        assert_eq!(format!("{tag}"), "0A1B2C3D");
     }
 }

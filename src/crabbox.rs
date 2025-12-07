@@ -1,10 +1,13 @@
 use std::{
     collections::HashMap,
+    fs,
     path::PathBuf,
+    str::FromStr,
     sync::{Arc, Mutex},
     thread,
 };
 
+use chrono::Utc;
 use rand::{rng, seq::SliceRandom};
 use tokio::{runtime::Builder, sync::mpsc};
 use tracing::{debug, info, warn};
@@ -18,6 +21,7 @@ use crate::{
     state::State,
     tag::TagId,
 };
+use toml_edit::{DocumentMut, table, value};
 
 #[derive(Default)]
 struct PlaybackStatus {
@@ -32,6 +36,7 @@ pub struct CrabboxSnapshot {
     pub queue_position: Option<usize>,
     pub library: Vec<PathBuf>,
     pub last_tag: Option<TagId>,
+    pub last_tag_command: Option<Command>,
 }
 
 #[derive(Clone, Default)]
@@ -164,6 +169,8 @@ pub struct Crabbox {
     shutdown_sound: Option<PathBuf>,
     default_volume: f32,
     state_file: Option<PathBuf>,
+    config_path: PathBuf,
+    config_backup_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -209,6 +216,8 @@ impl Crabbox {
             shutdown_sound,
             default_volume,
             state_file,
+            config_path: config.path.clone(),
+            config_backup_dir: config.backup_dir.clone(),
         }));
 
         thread::spawn({
@@ -233,12 +242,18 @@ impl Crabbox {
     }
 
     pub fn snapshot(&self) -> CrabboxSnapshot {
+        let last_tag_command = self
+            .status
+            .last_tag
+            .and_then(|tag| self.tags.get(&tag).cloned());
+
         CrabboxSnapshot {
             current: self.status.current.clone(),
             queue: self.queue.tracks.clone(),
             queue_position: self.queue.current,
             library: self.library.list_tracks(None),
             last_tag: self.status.last_tag,
+            last_tag_command,
         }
     }
 
@@ -317,6 +332,10 @@ impl Crabbox {
                     warn!("Failed to trigger shutdown: {err}");
                 }
             }
+            Command::AssignTag { id, command } => {
+                self.assign_tag(id, command.as_deref());
+                debug!(?id, "Command received: AssignTag");
+            }
             #[cfg(feature = "rpi")]
             Command::Tag { id } => {
                 self.status.last_tag = Some(id);
@@ -393,6 +412,77 @@ impl Crabbox {
         self.queue.log();
         self.status.current = None;
         self.save_state();
+    }
+
+    fn assign_tag(&mut self, id: TagId, command: Option<&str>) {
+        let parsed_command = command
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(Command::from_str)
+            .transpose();
+
+        match parsed_command {
+            Ok(Some(parsed_command)) => {
+                self.tags.insert(id, parsed_command.clone());
+                if let Err(err) = self.persist_tag_mapping(id, Some(&parsed_command)) {
+                    warn!(?id, ?err, "Failed to save tag mapping to config");
+                }
+            }
+            Ok(None) => {
+                self.tags.remove(&id);
+                if let Err(err) = self.persist_tag_mapping(id, None) {
+                    warn!(?id, ?err, "Failed to remove tag mapping from config");
+                }
+            }
+            Err(err) => warn!(?id, command, "Invalid command for tag: {err}"),
+        }
+    }
+
+    fn persist_tag_mapping(&self, id: TagId, command: Option<&Command>) -> Result<(), String> {
+        let config_raw = fs::read_to_string(&self.config_path).map_err(|err| err.to_string())?;
+        let mut document: DocumentMut = config_raw
+            .parse::<DocumentMut>()
+            .map_err(|err| err.to_string())?;
+
+        self.backup_config_file().map_err(|err| err.to_string())?;
+
+        if !document.as_table().contains_key("tags") {
+            document["tags"] = table();
+        }
+
+        let Some(tags) = document["tags"].as_table_mut() else {
+            return Err("[tags] is not a table".to_string());
+        };
+
+        let tag_key = id.to_string();
+        match command {
+            Some(command) => {
+                tags.insert(&tag_key, value(command.to_string()));
+            }
+            None => {
+                tags.remove(&tag_key);
+            }
+        }
+
+        fs::write(&self.config_path, document.to_string()).map_err(|err| err.to_string())
+    }
+
+    fn backup_config_file(&self) -> Result<(), std::io::Error> {
+        let Some(backup_dir) = self.config_backup_dir.as_ref() else {
+            return Ok(());
+        };
+
+        fs::create_dir_all(backup_dir)?;
+        let filename = self.config_path.file_name().map_or_else(
+            || String::from("config.toml"),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let timestamp = Utc::now().format("%Y%m%dT%H%M%S");
+        let backup_name = format!("{filename}.{timestamp}");
+        let backup_path = backup_dir.join(backup_name);
+
+        fs::copy(&self.config_path, backup_path)?;
+        Ok(())
     }
 
     fn save_state(&self) {

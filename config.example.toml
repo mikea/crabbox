@@ -13,6 +13,9 @@ dir = "/another/library"
 default_volume = 1.0
 # Optional; when set, playback state (queue and position) is stored here.
 state_file = "/var/lib/crabbox/state.json"
+# Optional; when set, configuration backups are written here before saving.
+# Each backup is named after the config file with a timestamp suffix.
+# config_backup_dir = "/var/lib/crabbox/backups"
 
 # Server configuration.
 [server]
