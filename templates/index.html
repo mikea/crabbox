@@ -75,10 +75,6 @@
     </div>
 
     <div class="section">
-      <a class="link-button" href="/upload">Upload files or folders</a>
-    </div>
-
-    <div class="section">
       <h2>Current queue</h2>
       {% if queue | length == 0 %}
         <p>Queue is empty</p>
@@ -110,15 +106,8 @@
 
     <div class="section">
       <h2>Library</h2>
-      {% if library | length == 0 %}
-        <p>No tracks found.</p>
-      {% else %}
-        <ul class="library">
-          {% for track in library %}
-            <li>{{ track }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
+      <p>Manage your music library, browse tracks, and upload new files.</p>
+      <a class="link-button" href="/library">Manage library</a>
     </div>
   </body>
 </html>

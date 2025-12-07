@@ -7,7 +7,7 @@ use super::AppState;
 pub(super) async fn index(State(state): State<AppState>) -> Html<String> {
     let snapshot = state.crabbox.lock().ok().map(|c| c.snapshot());
 
-    let (current, queue, queue_position, library, last_tag, last_tag_command) = match snapshot {
+    let (current, queue, queue_position, last_tag, last_tag_command) = match snapshot {
         Some(ref snapshot) => (
             snapshot.current.as_ref().map_or_else(
                 || "Nothing playing".to_string(),
@@ -15,18 +15,10 @@ pub(super) async fn index(State(state): State<AppState>) -> Html<String> {
             ),
             snapshot.queue.clone(),
             snapshot.queue_position,
-            snapshot.library.clone(),
             snapshot.last_tag,
             snapshot.last_tag_command.clone(),
         ),
-        None => (
-            "Unavailable".to_string(),
-            Vec::new(),
-            None,
-            Vec::new(),
-            None,
-            None,
-        ),
+        None => ("Unavailable".to_string(), Vec::new(), None, None, None),
     };
 
     let queue_items = queue
@@ -36,11 +28,6 @@ pub(super) async fn index(State(state): State<AppState>) -> Html<String> {
             name: track.display().to_string(),
             is_current: queue_position == Some(idx),
         })
-        .collect();
-
-    let library_items = library
-        .into_iter()
-        .map(|track| track.display().to_string())
         .collect();
 
     let last_tag = last_tag.map(|tag| TagAssignmentContext {
@@ -67,7 +54,6 @@ pub(super) async fn index(State(state): State<AppState>) -> Html<String> {
         IndexContext {
             current,
             queue: queue_items,
-            library: library_items,
             last_tag,
             tags,
         },
@@ -90,7 +76,6 @@ struct TagAssignmentContext {
 struct IndexContext {
     current: String,
     queue: Vec<QueueItem>,
-    library: Vec<String>,
     last_tag: Option<TagAssignmentContext>,
     tags: Vec<TagAssignmentContext>,
 }

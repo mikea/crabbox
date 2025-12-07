@@ -20,10 +20,12 @@ use crate::{AnyResult, commands::Command, crabbox::Crabbox};
 
 mod edit_tag;
 mod index;
+mod library;
 mod upload;
 
 use edit_tag::{assign_tag, edit_tag};
 use index::index;
+use library::library_page;
 use upload::{upload_files, upload_form};
 
 pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
@@ -49,6 +51,7 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
         .route("/list_files", get(list_files))
         .route("/edit_tag/{id}", get(edit_tag))
         .route("/assign_tag", post(assign_tag))
+        .route("/library", get(library_page))
         .route("/upload", get(upload_form))
         .route("/do_upload", post(upload_files))
         .with_state(state);
@@ -164,6 +167,13 @@ fn build_templates() -> AnyResult<Environment<'static>> {
     env.add_template(
         "index.html",
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/index.html")),
+    )?;
+    env.add_template(
+        "library.html",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/library.html"
+        )),
     )?;
     env.add_template(
         "upload.html",
