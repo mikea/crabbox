@@ -20,6 +20,10 @@ pub struct Config {
     pub tags: HashMap<TagId, Command>,
     #[serde(default)]
     pub state_file: Option<PathBuf>,
+    #[serde(default, rename = "config_backup_dir")]
+    pub backup_dir: Option<PathBuf>,
+    #[serde(skip)]
+    pub path: PathBuf,
     #[cfg(feature = "rpi")]
     pub gpio: Option<GpioConfig>,
     #[cfg(feature = "rpi")]
@@ -72,7 +76,9 @@ pub struct RfidConfig {
 impl Config {
     pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let raw = fs::read_to_string(path)?;
-        let config: Config = toml::from_str(&raw)?;
+        let mut config: Config = toml::from_str(&raw)?;
+
+        config.path = path.to_path_buf();
 
         if config.music.is_empty() {
             return Err(std::io::Error::new(

@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use serde::Deserialize;
 
@@ -6,9 +6,15 @@ use crate::tag::TagId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    Play { filter: Option<String> },
-    PlayPause { filter: Option<String> },
-    Shuffle { filter: Option<String> },
+    Play {
+        filter: Option<String>,
+    },
+    PlayPause {
+        filter: Option<String>,
+    },
+    Shuffle {
+        filter: Option<String>,
+    },
     Stop,
     Next,
     Prev,
@@ -16,8 +22,14 @@ pub enum Command {
     VolumeUp,
     VolumeDown,
     Shutdown,
+    AssignTag {
+        id: TagId,
+        command: Option<String>,
+    },
     #[cfg(feature = "rpi")]
-    Tag { id: TagId },
+    Tag {
+        id: TagId,
+    },
 }
 
 impl FromStr for Command {
@@ -25,6 +37,28 @@ impl FromStr for Command {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_command(s).ok_or_else(|| format!("Invalid command '{s}'"))
+    }
+}
+
+impl fmt::Display for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Command::Play { filter } => write_name_with_filter(f, "PLAY", filter.as_deref()),
+            Command::PlayPause { filter } => {
+                write_name_with_filter(f, "PLAYPAUSE", filter.as_deref())
+            }
+            Command::Shuffle { filter } => write_name_with_filter(f, "SHUFFLE", filter.as_deref()),
+            Command::Stop => f.write_str("STOP"),
+            Command::Next => f.write_str("NEXT"),
+            Command::Prev => f.write_str("PREV"),
+            Command::TrackDone => f.write_str("TRACKDONE"),
+            Command::VolumeUp => f.write_str("VOLUMEUP"),
+            Command::VolumeDown => f.write_str("VOLUMEDOWN"),
+            Command::Shutdown => f.write_str("SHUTDOWN"),
+            Command::AssignTag { id, .. } => write!(f, "ASSIGN_TAG {id}"),
+            #[cfg(feature = "rpi")]
+            Command::Tag { id } => write!(f, "TAG {id}"),
+        }
     }
 }
 
@@ -58,6 +92,18 @@ pub fn parse_command(input: &str) -> Option<Command> {
         "VOLUMEUP" => Some(Command::VolumeUp),
         "VOLUMEDOWN" => Some(Command::VolumeDown),
         _ => None,
+    }
+}
+
+fn write_name_with_filter(
+    f: &mut fmt::Formatter<'_>,
+    name: &str,
+    filter: Option<&str>,
+) -> fmt::Result {
+    if let Some(filter) = filter {
+        write!(f, "{name} {filter}")
+    } else {
+        f.write_str(name)
     }
 }
 

@@ -1,10 +1,13 @@
 use std::{
     collections::HashMap,
+    fs,
     path::PathBuf,
+    str::FromStr,
     sync::{Arc, Mutex},
     thread,
 };
 
+use chrono::Utc;
 use rand::{rng, seq::SliceRandom};
 use tokio::{runtime::Builder, sync::mpsc};
 use tracing::{debug, info, warn};
@@ -18,6 +21,7 @@ use crate::{
     state::State,
     tag::TagId,
 };
+use toml_edit::{DocumentMut, Value, table, value};
 
 #[derive(Default)]
 struct PlaybackStatus {
@@ -32,6 +36,7 @@ pub struct CrabboxSnapshot {
     pub queue_position: Option<usize>,
     pub library: Vec<PathBuf>,
     pub last_tag: Option<TagId>,
+    pub last_tag_command: Option<Command>,
 }
 
 #[derive(Clone, Default)]
@@ -164,6 +169,8 @@ pub struct Crabbox {
     shutdown_sound: Option<PathBuf>,
     default_volume: f32,
     state_file: Option<PathBuf>,
+    config_path: PathBuf,
+    config_backup_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -209,6 +216,8 @@ impl Crabbox {
             shutdown_sound,
             default_volume,
             state_file,
+            config_path: config.path.clone(),
+            config_backup_dir: config.backup_dir.clone(),
         }));
 
         thread::spawn({
@@ -233,12 +242,18 @@ impl Crabbox {
     }
 
     pub fn snapshot(&self) -> CrabboxSnapshot {
+        let last_tag_command = self
+            .status
+            .last_tag
+            .and_then(|tag| self.tags.get(&tag).cloned());
+
         CrabboxSnapshot {
             current: self.status.current.clone(),
             queue: self.queue.tracks.clone(),
             queue_position: self.queue.current,
             library: self.library.list_tracks(None),
             last_tag: self.status.last_tag,
+            last_tag_command,
         }
     }
 
@@ -316,6 +331,10 @@ impl Crabbox {
                 if let Err(err) = shutdown_now() {
                     warn!("Failed to trigger shutdown: {err}");
                 }
+            }
+            Command::AssignTag { id, command } => {
+                self.assign_tag(id, command.as_deref());
+                debug!(?id, "Command received: AssignTag");
             }
             #[cfg(feature = "rpi")]
             Command::Tag { id } => {
@@ -395,6 +414,83 @@ impl Crabbox {
         self.save_state();
     }
 
+    fn assign_tag(&mut self, id: TagId, command: Option<&str>) {
+        let parsed_command = command
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(Command::from_str)
+            .transpose();
+
+        match parsed_command {
+            Ok(Some(parsed_command)) => {
+                self.tags.insert(id, parsed_command.clone());
+                if let Err(err) = self.persist_tag_mapping(id, Some(&parsed_command)) {
+                    warn!(?id, ?err, "Failed to save tag mapping to config");
+                }
+            }
+            Ok(None) => {
+                self.tags.remove(&id);
+                if let Err(err) = self.persist_tag_mapping(id, None) {
+                    warn!(?id, ?err, "Failed to remove tag mapping from config");
+                }
+            }
+            Err(err) => warn!(?id, command, "Invalid command for tag: {err}"),
+        }
+    }
+
+    fn persist_tag_mapping(&self, id: TagId, command: Option<&Command>) -> Result<(), String> {
+        let config_raw = fs::read_to_string(&self.config_path).map_err(|err| err.to_string())?;
+        let mut document: DocumentMut = config_raw
+            .parse::<DocumentMut>()
+            .map_err(|err| err.to_string())?;
+
+        self.backup_config_file().map_err(|err| err.to_string())?;
+
+        let tags = document.as_table_mut().entry("tags").or_insert_with(table);
+
+        let Some(tags) = tags.as_table_mut() else {
+            return Err("[tags] is not a table".to_string());
+        };
+
+        let tag_key = id.to_string();
+        match command {
+            Some(command) => {
+                if let Some(existing) = tags.get_mut(&tag_key) {
+                    if let Some(value_mut) = existing.as_value_mut() {
+                        *value_mut = Value::from(command.to_string());
+                    } else {
+                        *existing = value(command.to_string());
+                    }
+                } else {
+                    tags.insert(&tag_key, value(command.to_string()));
+                }
+            }
+            None => {
+                tags.remove(&tag_key);
+            }
+        }
+
+        fs::write(&self.config_path, document.to_string()).map_err(|err| err.to_string())
+    }
+
+    fn backup_config_file(&self) -> Result<(), std::io::Error> {
+        let Some(backup_dir) = self.config_backup_dir.as_ref() else {
+            return Ok(());
+        };
+
+        fs::create_dir_all(backup_dir)?;
+        let filename = self.config_path.file_name().map_or_else(
+            || String::from("config.toml"),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let timestamp = Utc::now().format("%Y%m%dT%H%M%S");
+        let backup_name = format!("{filename}.{timestamp}");
+        let backup_path = backup_dir.join(backup_name);
+
+        fs::copy(&self.config_path, backup_path)?;
+        Ok(())
+    }
+
     fn save_state(&self) {
         let Some(path) = self.state_file.as_ref() else {
             return;
@@ -463,4 +559,106 @@ fn shutdown_now() -> std::io::Result<()> {
         .args(["shutdown", "now"])
         .spawn()
         .map(|_| ())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn crabbox_with_config(config_path: PathBuf, backup_dir: Option<PathBuf>) -> Crabbox {
+        let (tx, _rx) = mpsc::channel(1);
+
+        Crabbox {
+            library: Library {
+                directories: vec![],
+            },
+            queue: Queue::empty(),
+            tags: HashMap::new(),
+            command_tx: tx,
+            status: PlaybackStatus::default(),
+            shutdown_sound: None,
+            default_volume: 1.0,
+            state_file: None,
+            config_path,
+            config_backup_dir: backup_dir,
+        }
+    }
+
+    #[test]
+    fn persist_tag_mapping_creates_backup_before_saving() {
+        let tmp = tempdir().expect("tempdir");
+        let config_path = tmp.path().join("config.toml");
+        let backup_dir = tmp.path().join("backups");
+        let initial_config = r#"[[music]]
+dir = "/music"
+
+[server]
+web = "0.0.0.0:8080"
+
+[tags]
+0A1B2C3D = "PLAY"
+"#;
+
+        fs::write(&config_path, initial_config).expect("write config");
+
+        let crabbox = crabbox_with_config(config_path.clone(), Some(backup_dir.clone()));
+
+        crabbox
+            .persist_tag_mapping(
+                TagId::from_hex_str("0A1B2C3D").unwrap(),
+                Some(&Command::Stop),
+            )
+            .expect("persist tag");
+
+        let backups: Vec<_> = fs::read_dir(&backup_dir)
+            .expect("read backup dir")
+            .map(|entry| entry.expect("dir entry").path())
+            .collect();
+
+        assert_eq!(backups.len(), 1, "expected exactly one backup file");
+
+        let backup_contents = fs::read_to_string(&backups[0]).expect("backup contents");
+        assert_eq!(backup_contents, initial_config);
+
+        let updated_config = fs::read_to_string(config_path).expect("updated config");
+        assert!(updated_config.contains("0A1B2C3D = \"STOP\""));
+    }
+
+    #[test]
+    fn persist_tag_mapping_preserves_existing_tags_table() {
+        let tmp = tempdir().expect("tempdir");
+        let config_path = tmp.path().join("config.toml");
+        let initial_config = r#"[[music]]
+dir = "/music"
+
+[server]
+web = "0.0.0.0:8080"
+
+[tags]
+# keep this comment
+ABCD1234 = "PLAY"
+# untouched entry
+DEADBEEF = "SHUFFLE 80s/*"
+"#;
+
+        fs::write(&config_path, initial_config).expect("write config");
+
+        let crabbox = crabbox_with_config(config_path.clone(), None);
+
+        crabbox
+            .persist_tag_mapping(
+                TagId::from_hex_str("ABCD1234").unwrap(),
+                Some(&Command::Stop),
+            )
+            .expect("persist tag");
+
+        let updated_config = fs::read_to_string(config_path).expect("updated config");
+
+        assert!(updated_config.contains("# keep this comment"));
+        assert!(updated_config.contains("# untouched entry"));
+        assert!(updated_config.contains("DEADBEEF = \"SHUFFLE 80s/*\""));
+        assert!(updated_config.contains("ABCD1234 = \"STOP\""));
+    }
 }
