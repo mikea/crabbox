@@ -106,11 +106,7 @@ impl GpioController {
                     &gpio,
                     pin,
                     debounce_duration,
-                    make_sender(
-                        command_tx,
-                        Command::PlayPause { filter: None },
-                        "PlayPause",
-                    ),
+                    make_sender(command_tx, Command::PlayPause { filter: None }, "PlayPause"),
                 )
             })
             .transpose()?;

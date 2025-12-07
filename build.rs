@@ -8,7 +8,10 @@ fn main() {
     set_env("BUILD_TIMESTAMP", timestamp());
     set_env("BUILD_PROFILE", env_var("PROFILE"));
     set_env("BUILD_TARGET", env_var("TARGET"));
-    set_env("GIT_COMMIT", git_commit().unwrap_or_else(|| "unknown".to_string()));
+    set_env(
+        "GIT_COMMIT",
+        git_commit().unwrap_or_else(|| "unknown".to_string()),
+    );
     set_env(
         "GIT_DIRTY",
         git_dirty()
@@ -63,9 +66,5 @@ fn command_output(cmd: &[&str]) -> Option<String> {
     }
 
     let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
+    if text.is_empty() { None } else { Some(text) }
 }

@@ -18,8 +18,10 @@ use tracing::warn;
 
 use crate::{AnyResult, commands::Command, crabbox::Crabbox};
 
+mod edit_tag;
 mod upload;
 
+use edit_tag::{assign_tag, edit_tag};
 use upload::{upload_files, upload_form};
 
 pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
@@ -39,6 +41,8 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
         .route("/volume-down", post(volume_down))
         .route("/shutdown", post(shutdown))
         .route("/command", post(run_command))
+        .route("/edit_tag", get(edit_tag))
+        .route("/assign_tag", post(assign_tag))
         .route("/upload", get(upload_form))
         .route("/do_upload", post(upload_files))
         .with_state(state);
@@ -51,7 +55,7 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
 async fn index(State(state): State<AppState>) -> Html<String> {
     let snapshot = state.crabbox.lock().ok().map(|c| c.snapshot());
 
-    let (current, queue, queue_position, library, last_tag) = match snapshot {
+    let (current, queue, queue_position, library, last_tag, last_tag_command) = match snapshot {
         Some(snapshot) => (
             snapshot.current.map_or_else(
                 || "Nothing playing".to_string(),
@@ -61,12 +65,14 @@ async fn index(State(state): State<AppState>) -> Html<String> {
             snapshot.queue_position,
             snapshot.library,
             snapshot.last_tag,
+            snapshot.last_tag_command,
         ),
         None => (
             "Unavailable".to_string(),
             Vec::new(),
             None,
             Vec::new(),
+            None,
             None,
         ),
     };
@@ -100,8 +106,19 @@ async fn index(State(state): State<AppState>) -> Html<String> {
     };
 
     let current_display = escape_html(&current);
-    let last_tag_display =
-        last_tag.map_or_else(|| "None".to_string(), |tag| escape_html(&tag.to_string()));
+    let last_tag_html = last_tag.map_or_else(|| {
+        "<p>Last tag: <span class=\"muted\">None</span></p>".to_string()
+    }, |tag| {
+        let tag_text = escape_html(&tag.to_string());
+        let command_text = last_tag_command
+            .map_or_else(
+                || "Unassigned".to_string(),
+                |command| escape_html(&command.to_string()),
+            );
+        format!(
+            "<p>Last tag: <span class=\"muted\">{tag_text}</span> · Command: <span class=\"muted\">{command_text}</span> <a class=\"link-button\" href=\"/edit_tag\">Edit tag</a></p>",
+        )
+    });
 
     let page = format!(
         r#"<!doctype html>
@@ -120,6 +137,8 @@ async fn index(State(state): State<AppState>) -> Html<String> {
       .secondary button:hover {{ background: #525252; }}
       .danger button {{ background: #da1e28; }}
       .danger button:hover {{ background: #a2191f; }}
+      button.danger {{ background: #da1e28; }}
+      button.danger:hover {{ background: #a2191f; }}
       .queue, .library {{ padding-left: 20px; }}
       .command {{ margin: 16px 0; max-width: 480px; display: flex; gap: 8px; }}
       .command input {{ flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }}
@@ -133,7 +152,7 @@ async fn index(State(state): State<AppState>) -> Html<String> {
     <h1>Crabbox</h1>
     <div class="section">
       <p>Current track: <span class="muted">{current_display}</span></p>
-      <p>Last tag: <span class="muted">{last_tag_display}</span></p>
+      {last_tag_html}
       <div class="controls">
         <form method="post" action="/play">
           <button type="submit">Play</button>
@@ -248,7 +267,7 @@ async fn run_command(State(state): State<AppState>, Form(form): Form<CommandForm
     Redirect::to("/")
 }
 
-async fn send_command(state: &AppState, command: Command) {
+pub(super) async fn send_command(state: &AppState, command: Command) {
     let sender = state.crabbox.lock().ok().map(|c| c.sender());
 
     if let Some(sender) = sender {
