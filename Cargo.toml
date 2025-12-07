@@ -18,7 +18,7 @@ toml = "0"
 rand = "0"
 walkdir = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "fs"] }
-axum = "0"
+axum = { version = "0", features = ["multipart"] }
 libc = "0"
 rodio = { version = "0", default-features = true }
 tracing = "0"
