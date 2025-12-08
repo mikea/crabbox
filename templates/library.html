@@ -15,6 +15,9 @@
       .filter { display: flex; gap: 8px; margin: 12px 0; }
       .filter input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
       .back { text-decoration: none; color: #0f62fe; }
+      .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0; color: #525252; font-size: 14px; }
+      .footer a { color: inherit; }
+      .footer a:hover { text-decoration: underline; }
     </style>
   </head>
   <body>
@@ -38,6 +41,8 @@
     </div>
 
     <p><a class="back" href="/">&larr; Back to player</a></p>
+
+    {% include "footer.html" %}
 
     <script>
       const filterInput = document.getElementById("filter");
