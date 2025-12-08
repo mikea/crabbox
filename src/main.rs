@@ -9,6 +9,7 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
+use serde::Serialize;
 use tracing::{error, info};
 use tracing_subscriber::FmtSubscriber;
 
@@ -39,7 +40,8 @@ use web::serve_web;
 
 type AnyResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-struct BuildInfo {
+#[derive(Clone, Copy, Serialize)]
+pub(crate) struct BuildInfo {
     version: &'static str,
     profile: &'static str,
     target: &'static str,
@@ -49,7 +51,7 @@ struct BuildInfo {
     built_at: &'static str,
 }
 
-const BUILD_INFO: BuildInfo = BuildInfo {
+pub(crate) const BUILD_INFO: BuildInfo = BuildInfo {
     version: env!("CARGO_PKG_VERSION"),
     profile: match (option_env!("BUILD_PROFILE"), option_env!("PROFILE")) {
         (Some(value), _) | (None, Some(value)) => value,

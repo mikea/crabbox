@@ -11,12 +11,12 @@ use axum::{
     response::{Html, Json, Redirect},
     routing::{get, post},
 };
-use minijinja::Environment;
+use minijinja::{Environment, value::Value};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tracing::warn;
 
-use crate::{AnyResult, commands::Command, crabbox::Crabbox};
+use crate::{AnyResult, BUILD_INFO, BuildInfo, commands::Command, crabbox::Crabbox};
 
 mod edit_tag;
 mod index;
@@ -29,7 +29,7 @@ use library::library_page;
 use upload::{upload_files, upload_form};
 
 pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyResult<()> {
-    let templates = build_templates()?;
+    let templates = build_templates(BUILD_INFO)?;
 
     let state = AppState {
         crabbox,
@@ -161,12 +161,20 @@ async fn list_files(
     Json(files)
 }
 
-fn build_templates() -> AnyResult<Environment<'static>> {
+fn build_templates(build_info: BuildInfo) -> AnyResult<Environment<'static>> {
     let mut env = Environment::new();
     env.set_auto_escape_callback(minijinja::default_auto_escape_callback);
+    env.add_global("build_info", Value::from_serialize(build_info));
     env.add_template(
         "index.html",
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/index.html")),
+    )?;
+    env.add_template(
+        "footer.html",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/footer.html"
+        )),
     )?;
     env.add_template(
         "library.html",

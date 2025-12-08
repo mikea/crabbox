@@ -25,6 +25,9 @@
       .link-button:hover { background: #0b4cc0; }
       .tags { padding-left: 20px; }
       .tags li { margin-bottom: 4px; }
+      .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0; color: #525252; font-size: 14px; }
+      .footer a { color: inherit; }
+      .footer a:hover { text-decoration: underline; }
     </style>
   </head>
   <body>
@@ -109,5 +112,7 @@
       <p>Manage your music library, browse tracks, and upload new files.</p>
       <a class="link-button" href="/library">Manage library</a>
     </div>
+
+    {% include "footer.html" %}
   </body>
 </html>
