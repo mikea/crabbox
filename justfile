@@ -5,6 +5,8 @@ alias w := watch
 watch *args="test":
     cargo watch -c -- just {{args}}
 
+prepare: fmt check test clippy
+
 check:
     cargo check
 

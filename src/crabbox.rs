@@ -158,6 +158,10 @@ impl Queue {
             debug!("{track:?}");
         }
     }
+
+    fn is_empty(&self) -> bool {
+        self.tracks.is_empty()
+    }
 }
 
 pub struct Crabbox {
@@ -272,12 +276,17 @@ impl Crabbox {
             Command::Play { filter } => {
                 let filter = filter.as_deref();
                 debug!(?filter, "Command received: Play");
-                self.rebuild_queue(filter, QueueOrder::Ordered);
+
                 player.stop();
 
-                let track = self.queue.current_track();
+                if filter.is_some() || self.queue.is_empty() {
+                    debug!("Rebuilding queue");
+                    self.rebuild_queue(filter, QueueOrder::Ordered);
+                }
 
+                let track = self.queue.current_track();
                 self.play_queue_track(track, player);
+                debug!("Play command handled");
             }
             Command::PlayPause { filter } => {
                 self.on_play_pause(player, filter.as_ref());
