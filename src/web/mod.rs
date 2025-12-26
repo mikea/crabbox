@@ -3,6 +3,7 @@ use std::{
     path::PathBuf,
     str::FromStr,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use axum::{
@@ -13,8 +14,8 @@ use axum::{
 };
 use minijinja::Environment;
 use serde::{Deserialize, Serialize};
-use tokio::net::TcpListener;
-use tracing::warn;
+use tokio::{net::TcpListener, time::sleep};
+use tracing::{info, warn};
 
 use crate::{AnyResult, commands::Command, crabbox::Crabbox};
 
@@ -55,9 +56,32 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
         .route("/upload", get(upload_form))
         .route("/do_upload", post(upload_files))
         .with_state(state);
-    let listener = TcpListener::bind(addr).await?;
+    let listener = bind_with_retry(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+async fn bind_with_retry(addr: SocketAddr) -> AnyResult<TcpListener> {
+    let mut attempts = 0usize;
+    loop {
+        match TcpListener::bind(addr).await {
+            Ok(listener) => {
+                if attempts > 0 {
+                    info!(attempts, "Web server successfully bound after retrying");
+                }
+                return Ok(listener);
+            }
+            Err(err) => {
+                attempts += 1;
+                warn!(
+                    attempts,
+                    %addr,
+                    "Failed to bind web address: {err}. Retrying in 2s."
+                );
+                sleep(Duration::from_secs(2)).await;
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
