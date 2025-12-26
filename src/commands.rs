@@ -6,30 +6,19 @@ use crate::tag::TagId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    Play {
-        filter: Option<String>,
-    },
-    PlayPause {
-        filter: Option<String>,
-    },
-    Shuffle {
-        filter: Option<String>,
-    },
+    Play { filter: Option<String> },
+    PlayPause { filter: Option<String> },
+    Shuffle { filter: Option<String> },
     Stop,
     Next,
     Prev,
     TrackDone,
     VolumeUp,
     VolumeDown,
+    ClearQueue,
     Shutdown,
-    AssignTag {
-        id: TagId,
-        command: Option<String>,
-    },
-    #[cfg(feature = "rpi")]
-    Tag {
-        id: TagId,
-    },
+    AssignTag { id: TagId, command: Option<String> },
+    Tag { id: TagId },
 }
 
 impl FromStr for Command {
@@ -54,9 +43,9 @@ impl fmt::Display for Command {
             Command::TrackDone => f.write_str("TRACKDONE"),
             Command::VolumeUp => f.write_str("VOLUMEUP"),
             Command::VolumeDown => f.write_str("VOLUMEDOWN"),
+            Command::ClearQueue => f.write_str("CLEARQUEUE"),
             Command::Shutdown => f.write_str("SHUTDOWN"),
             Command::AssignTag { id, .. } => write!(f, "ASSIGN_TAG {id}"),
-            #[cfg(feature = "rpi")]
             Command::Tag { id } => write!(f, "TAG {id}"),
         }
     }
@@ -88,6 +77,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
         "STOP" => Some(Command::Stop),
         "NEXT" => Some(Command::Next),
         "PREV" | "PREVIOUS" => Some(Command::Prev),
+        "CLEARQUEUE" => Some(Command::ClearQueue),
         "SHUTDOWN" => Some(Command::Shutdown),
         "VOLUMEUP" => Some(Command::VolumeUp),
         "VOLUMEDOWN" => Some(Command::VolumeDown),
@@ -114,9 +104,9 @@ impl Command {
             Command::TrackDone => "TRACKDONE",
             Command::VolumeUp => "VOLUMEUP",
             Command::VolumeDown => "VOLUMEDOWN",
+            Command::ClearQueue => "CLEARQUEUE",
             Command::Shutdown => "SHUTDOWN",
             Command::AssignTag { .. } => "ASSIGN_TAG",
-            #[cfg(feature = "rpi")]
             Command::Tag { .. } => "TAG",
         }
     }
@@ -143,6 +133,7 @@ mod tests {
         assert_eq!(parse_command("PLAY"), Some(Command::Play { filter: None }));
         assert_eq!(parse_command("Stop"), Some(Command::Stop));
         assert_eq!(parse_command("previous"), Some(Command::Prev));
+        assert_eq!(parse_command("clearqueue"), Some(Command::ClearQueue));
     }
 
     #[test]

@@ -8,7 +8,7 @@ use std::{
 
 use axum::{
     Router,
-    extract::{Form, Query, State},
+    extract::{Form, Path, Query, State},
     response::{Html, Json, Redirect},
     routing::{get, post},
 };
@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{net::TcpListener, time::sleep};
 use tracing::{info, warn};
 
-use crate::{AnyResult, BUILD_INFO, BuildInfo, commands::Command, crabbox::Crabbox};
+use crate::{AnyResult, BUILD_INFO, BuildInfo, commands::Command, crabbox::Crabbox, tag::TagId};
 
 mod edit_tag;
 mod index;
@@ -47,6 +47,8 @@ pub async fn serve_web(addr: SocketAddr, crabbox: Arc<Mutex<Crabbox>>) -> AnyRes
         .route("/prev", post(prev))
         .route("/volume-up", post(volume_up))
         .route("/volume-down", post(volume_down))
+        .route("/clear-queue", post(clear_queue))
+        .route("/activate_tag/{id}", post(activate_tag))
         .route("/shutdown", post(shutdown))
         .route("/command", post(run_command))
         .route("/list_files", get(list_files))
@@ -140,6 +142,20 @@ async fn volume_down(State(state): State<AppState>) -> Redirect {
 
 async fn shutdown(State(state): State<AppState>) -> Redirect {
     send_command(&state, Command::Shutdown).await;
+    Redirect::to("/")
+}
+
+async fn clear_queue(State(state): State<AppState>) -> Redirect {
+    send_command(&state, Command::ClearQueue).await;
+    Redirect::to("/")
+}
+
+async fn activate_tag(Path(id): Path<String>, State(state): State<AppState>) -> Redirect {
+    match TagId::from_str(&id) {
+        Ok(tag_id) => send_command(&state, Command::Tag { id: tag_id }).await,
+        Err(err) => warn!(%id, "Invalid tag id: {err}"),
+    }
+
     Redirect::to("/")
 }
 

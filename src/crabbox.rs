@@ -272,10 +272,10 @@ impl Crabbox {
     }
 
     fn process_command(&mut self, cmd: Command, player: &mut Player) {
+        debug!(?cmd, "Processing command");
         match cmd {
             Command::Play { filter } => {
                 let filter = filter.as_deref();
-                debug!(?filter, "Command received: Play");
 
                 player.stop();
 
@@ -299,42 +299,33 @@ impl Crabbox {
                 let track = self.queue.current_track();
 
                 self.play_queue_track(track, player);
-                debug!(?filter, "Command received: Shuffle");
             }
             Command::Stop => {
                 player.stop();
                 self.status.current = None;
                 self.save_state();
-                debug!("Command received: Stop");
             }
-            Command::Next => {
+            Command::ClearQueue => {
+                player.stop();
+                self.queue = Queue::empty();
+                self.status.current = None;
+                self.save_state();
+            }
+            Command::Next | Command::TrackDone => {
                 let track = self.queue.next_track();
-
                 self.play_queue_track(track, player);
-                debug!("Command received: Next");
             }
             Command::Prev => {
                 let track = self.queue.prev_track();
-
                 self.play_queue_track(track, player);
-                debug!("Command received: Prev");
-            }
-            Command::TrackDone => {
-                let track = self.queue.next_track();
-
-                self.play_queue_track(track, player);
-                debug!("Command received: TrackDone");
             }
             Command::VolumeUp => {
                 player.volume_up();
-                debug!("Command received: VolumeUp");
             }
             Command::VolumeDown => {
                 player.volume_down();
-                debug!("Command received: VolumeDown");
             }
             Command::Shutdown => {
-                debug!("Command received: Shutdown");
                 player.stop();
                 self.status.current = None;
                 self.save_state();
@@ -351,7 +342,6 @@ impl Crabbox {
                 self.assign_tag(id, command.as_deref());
                 debug!(?id, "Command received: AssignTag");
             }
-            #[cfg(feature = "rpi")]
             Command::Tag { id } => {
                 self.status.last_tag = Some(id);
                 match self.tags.get(&id).cloned() {
@@ -396,7 +386,6 @@ impl Crabbox {
             ToggleResult::Toggled => {}
         }
         self.save_state();
-        debug!(?filter, "Command received: PlayPause");
     }
 
     fn play_queue_track(&mut self, track: Option<PathBuf>, player: &mut Player) {
