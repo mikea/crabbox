@@ -29,6 +29,9 @@
       .muted { color: #666; }
       .link-button { display: inline-block; padding: 10px 14px; background: #6f6f6f; color: #fff; border-radius: 6px; text-decoration: none; }
       .link-button:hover { background: #525252; }
+      .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0; color: #525252; font-size: 14px; }
+      .footer a { color: inherit; }
+      .footer a:hover { text-decoration: underline; }
     </style>
   </head>
   <body>
@@ -72,6 +75,8 @@
     <div class="section">
       <a class="link-button" href="/">Back to controls</a>
     </div>
+
+    {% include "footer.html" %}
     <script>
       const commandSelect = document.getElementById("command-select");
       const filterContainer = document.getElementById("filter-container");
