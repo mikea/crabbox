@@ -111,6 +111,36 @@ AI-assisted code is welcome, with fiew common caveats:
 - no huge PRs
 - you read the code and verify it does what you asked it to
 
-# Crabbox I
+# Crabbox mkI
 
 ![crabbox](crabbox.jpg)
+
+## mkI GPIO Pinout
+
+https://pinout.xyz/#
+
+
+| Name              | GPIO    | Pin |
+| ----------------- | ------- | --- |
+| RFID SDA          | GPIO 8  | 24  |
+| RFID SCK          | GPIO 11 | 23  |
+| RFID MOSI         | GPIO 10 | 19  |
+| RFID MISO         | GPIO 9  | 21  |
+| RFID IRQ          | GPIO 24 | 18  |
+| RFID GND          |         | 20  |
+| RFID RST          | GPIO 25 | 22  |
+| RFID 3.3v         |         | 17  |
+| MiniAmp           | GPIO 18 | 12  |
+| MiniAmp           | GPIO 19 | 35  |
+| MiniAmp           | GPIO 20 | 38  |
+| MiniAmp           | GPIO 21 | 40  |
+| MiniAmp Mute      | GPIO 16 | 36  |
+| MiniAmp Power off | GPIO 26 | 37  |
+| Vol Up            | GPIO 5  | 29  |
+| Vol Down          | GPIO 6  | 31  |
+| Prev              | GPIO 22 | 15  |
+| Next              | GPIO 23 | 16  |
+| Play/Pause        | GPIO 27 | 13  |
+| Shut down         | GPIO 3  | 5   |
+
+
