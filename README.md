@@ -111,11 +111,11 @@ AI-assisted code is welcome, with fiew common caveats:
 - no huge PRs
 - you read the code and verify it does what you asked it to
 
-# Crabbox mkI
+# Crabbox mk I
 
 ![crabbox](crabbox.jpg)
 
-## mkI GPIO Pinout
+## GPIO Pinout
 
 https://pinout.xyz/#
 
